@@ -49,6 +49,7 @@ START_POSITIONS = [
     [VIRTUAL_WIDTH - 30, 30, 2],
     [VIRTUAL_WIDTH - 30, VIRTUAL_HEIGHT - 30, 2],
 ]
+FPSAVERAGECOUNT = 10
 
 # game modes
 MODE_FULL = 0
@@ -211,6 +212,7 @@ player_x = 0
 player_y = 0
 player_direction = 0
 lasthigh = "AAA"
+showfps = False
 
 loadSettings()
 score = initHighscore()
@@ -455,10 +457,25 @@ def playGame():
     global first_player
     global won
     global boost
+    global showfps
 
     log("Game")
 
-    engine.fps_limit(60)
+    #engine.fps_limit(60)
+    engine.disable_fps_limit()
+    
+    if showfps:
+        fpsnode =  Text2DNode(
+          position=Vector2(0, 0),
+          text="FPS",
+          font=font16,
+          line_spacing=1,
+          color=YELLOW,
+          scale=Vector2(1, 1),
+          layer=100
+        )
+        helper.align_top(fpsnode)
+        helper.align_left(fpsnode)
 
     # Clear virtual screen
     virtual_screen.fill(BACKGROUND)
@@ -488,8 +505,19 @@ def playGame():
     updateScreen(arena)
 
     log("Loop")
+    fpscount = FPSAVERAGECOUNT
+    fpssum = 0
     while True:
         if engine.tick():
+            if showfps:
+                fps = engine.get_running_fps()
+                fpssum += fps
+                fpscount -= 1
+                if fpscount == 0:
+                    fpsnode.text = str(fpssum // FPSAVERAGECOUNT)
+                    helper.align_left(fpsnode)
+                    fpssum = 0
+                    fpscount = FPSAVERAGECOUNT
 
             # Turn left on LB
             if engine_io.LB.is_just_pressed:
@@ -592,7 +620,10 @@ def playGame():
     
     # always stop rumble
     engine_io.rumble(0)
-    
+
+    if showfps:
+        fpsnode.mark_destroy()
+
     #remove the arena sprite
     arena.mark_destroy()
 
@@ -737,6 +768,7 @@ def displayOptions():
     global game_mode
     global first_player
     global speed
+    global showfps
     
     title = helper.Text("Options",font16,Vector2(1.5, 1.5),WHITE)
     help = helper.Text("U/D Select\nL/R Change\nA Ok B Help",font6,Vector2(1, 1),YELLOW)
@@ -747,7 +779,9 @@ def displayOptions():
                  options.OptionsValue("Pure",MODE_PURE),
                  options.OptionsValue("Link",MODE_LINK),
                 ]
-    
+
+
+
     gamespeeds = []
     for sp in range(1,11):
         gamespeeds.append(options.OptionsValue(str(sp),sp))
@@ -775,10 +809,17 @@ def displayOptions():
 
     node.addoption("Speed:",helptext ,"speed", gamespeeds, speed)
     
+    offon = [options.OptionsValue("Off", False),
+             options.OptionsValue("On", True)
+            ]
+
+    node.addoption("ShowFPS:", "", "showfps", offon, showfps)
+    
     node.show()
     
     game_mode = data["mode"]
     speed = data["speed"]
+    showfps = data["showfps"]
 
     print("mode="+str(game_mode))
     print("speed="+str(speed))
