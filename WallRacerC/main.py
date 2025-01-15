@@ -461,8 +461,8 @@ def playGame():
 
     log("Game")
 
-    #engine.fps_limit(60)
-    engine.disable_fps_limit()
+    engine.fps_limit(60)
+    #engine.disable_fps_limit()
     
     if showfps:
         fpsnode =  Text2DNode(
