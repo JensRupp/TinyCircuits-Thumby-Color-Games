@@ -1,7 +1,8 @@
 from engine_nodes import EmptyNode, Text2DNode
 import engine_link
+import engine_draw
 import time
-import helper
+from gaclib import helper
 import engine
 import engine_io
 from engine_math import Vector2
@@ -33,11 +34,12 @@ def log(msg):
     #logfile.flush()
 
 class Value():
-   def __init__(self, name: str, type, pos):
+   def __init__(self, name: str, type, pos, count):
         super().__init__()
         self.name = name
         self.type = type
         self.pos = pos
+        self.count = count
 
 cancel = False
 
@@ -55,6 +57,7 @@ class MultiplayerNode(EmptyNode):
 
     def __init__(self):
         super().__init__(self)
+        
         self.layer = 0
         self.countdown = 5
         self.hostmode = HOSTMODE_RANDOM
@@ -69,11 +72,13 @@ class MultiplayerNode(EmptyNode):
         #buffer contains data from last round or 0 at startup
         self.cb_client = None
         #host callback
-        #call with the data from thr client
+        #call with the data from the client
         #host can process the data and add new values
         self.cb_host = None
         #called for host and client with the processed data
         self.cb_work = None
+        # called once on the host in the start code to init the bufefr and send to the client
+        self.cb_init = None
         
         self.text_connecting = None
         self.text_cancel = None
@@ -85,6 +90,8 @@ class MultiplayerNode(EmptyNode):
         self.height = helper.SCREEN_HEIGHT
         
         self.synced = False
+        self.counter = 0
+        self.points = 0
         
         engine_link.set_connected_cb(connected)
         engine_link.set_disconnected_cb(disconnected)
@@ -96,7 +103,17 @@ class MultiplayerNode(EmptyNode):
         if self.hostmode == HOSTMODE_RANDOM:
             return engine_link.is_host()
         else:
-            return self.host
+           return self.host
+        
+    def debug(self):
+        r = ""
+        for value in self.values.values():
+            r = r + " "+ value.name +"("+str(value.type)+","+str(value.pos)+")="+str(self.read(value.name))
+        return r
+    
+    def cancel(self):
+        global cancel
+        cancel = True
         
     def stop(self):
         engine_link.stop()
@@ -160,7 +177,7 @@ class MultiplayerNode(EmptyNode):
                   break
                 
         nodestart.mark_destroy()
-                   
+        nodecancel.mark_destroy()                   
         
         if cancel:
             engine_link.stop()
@@ -178,10 +195,8 @@ class MultiplayerNode(EmptyNode):
             scale=self.text_countdown.scale,
             )
         self.add_child(nodecountdown)
-        nodecancel.mark_destroy()
-     
-        sleep_time = engine.time_to_next_tick() / 1000
-        time.sleep(sleep_time)
+        
+        time.sleep(0.5)
         engine.tick() #display the text
         
         while (count > 0) and (not cancel) :
@@ -206,35 +221,53 @@ class MultiplayerNode(EmptyNode):
         
         if cancel:
             engine_link.stop()
-            return False            
+            return False
         
+        time.sleep(0.5)
+        engine.tick() 
+    
+        if self.is_host():
+            #engine_io.indicator(engine_draw.red)
+            #host ini buffer and send
+            if self.cb_init != None:
+                self.cb_init(self)
+            engine_link.send(self.buffer)
+        else:
+            #engine_io.indicator(engine_draw.yellow)
+            #client read init buffer
+            while  engine_link.available() < self.size:
+                pass
+            engine_link.read_into(self.buffer, self.size)
+        #engine_io.indicator(engine_draw.green)
+                 
         self.synced = True
         return True
             
-        
-    def register(self,name: str, type):
-        v = Value(name,type,self.datapos)
+    def register(self,name: str, type, count=1):
+        v = Value(name,type,self.datapos, count)
         self.values[name] = v
-        self.datapos += VALUE_SIZE[type]
-        self.size += VALUE_SIZE[type]
+        self.datapos += VALUE_SIZE[type] * count
+        self.size += VALUE_SIZE[type] * count
         self.buffer = bytearray(self.size)
         return v.pos
     
     def write_byte(self, pos,value):
         v = int(value)
         self.buffer[pos] = v & 0b11111111
-        
+
     def write_word(self, pos,value):
         v = int(value)
         self.buffer[pos] = v & 0b11111111
         self.buffer[pos+1] = (v >> 8)  & 0b11111111
-        
-    def write(self, name, value):
+            
+    def write(self, name, value, index = 0):
         v = self.values[name]
+        pos = v.pos + VALUE_SIZE[v.type] * index
         if v.type == VALUE_BYTE:
-            self.write_byte(v.pos, value)
+            self.write_byte(pos, value)
         elif v.type == VALUE_WORD:
-            self.write_word(v.pos, value)
+            self.write_word(pos, value)
+            
                                     
     def read_byte(self,pos):
         return self.buffer[pos]
@@ -243,12 +276,13 @@ class MultiplayerNode(EmptyNode):
         v = self.buffer[pos] + (self.buffer[pos+1] << 8 )
         return v
     
-    def read(self,name):
+    def read(self,name,index = 0):
         v = self.values[name]
+        pos = v.pos + VALUE_SIZE[v.type] * index
         if v.type == VALUE_BYTE:
-            return self.read_byte(v.pos) 
+            return self.read_byte(pos) 
         elif v.type == VALUE_WORD:
-            return self.read_word(v.pos)
+            return self.read_word(pos)
         
     def tick(self, dt):
         global cancel
@@ -277,7 +311,7 @@ class MultiplayerNode(EmptyNode):
                 engine_link.read_into(self.buffer, self.size)
                 if self.cb_work != None:
                     self.cb_work(self)  
-
+            self.counter += 1
     
  
         
