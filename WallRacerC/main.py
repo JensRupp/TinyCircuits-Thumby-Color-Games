@@ -102,6 +102,9 @@ PLAYER2 = BLUE
 PLAYER2A = 0x0291  # dark blue
 PLAYER2B = 0x4479  # medium blue
 PLAYER2C = 0x65bf  # light blue
+
+PLAYER_COLOR=[GREEN, BLUE]
+
 EXPLOSION = RED
 ANIMATION = [YELLOW, RED]
 
@@ -111,30 +114,6 @@ log = logger.log("/Games/WallRacerC/wallracer.log")
 log.info("Start")
 
 
-# align node relative to a position
-# 0 middle, 1 left/top 2 right/bottom
-def align(textnode, x, y, xalign, yalign, xscreen=False, yscreen=False):
-    if xalign == 1:
-        if xscreen:
-            x = -int(SCREEN_WIDTH // 2) + math.ceil(textnode.width / 2)
-        else:
-            x = x + math.ceil(textnode.width / 2)
-    elif xalign == 2:
-        if xscreen:
-            x = int(SCREEN_WIDTH // 2) - math.ceil(textnode.width / 2)
-        else:
-            x = x - math.ceil(textnode.width / 2)
-    if yalign == 1:
-        if yscreen:
-            y = -int(SCREEN_HEIGHT // 2) + math.ceil(textnode.height / 2) + 2
-        else:
-            y = y + math.ceil(textnode.height / 2)
-    elif yalign == 2:
-        if yscreen:
-            y = int(SCREEN_HEIGHT // 2) - math.ceil(textnode.height / 2)
-        else:
-            y = y - math.ceil(textnode.height / 2)
-    textnode.position = Vector2(x, y)
 
 
 def print_memory_usage():
@@ -217,11 +196,8 @@ loadSettings()
 score = initHighscore()
 
 # for multiplayer
-won = True
 first_player = True
-# for explosions
-bits = []
-explosionstep = 0
+
 
 # Add a bonus dot at random position but keep distance to other dots and player
 def addBonus():
@@ -299,27 +275,6 @@ def checkBonus(x, y):
             hit = index
     return hit
 
-
-def setStartPosition():
-    global game_mode
-    global player_x
-    global player_y
-    global player_direction
-
-
-
-    if game_mode == MODE_LINK:
-        if first_player:
-            startpos = random.randint(0, 1)
-        else:
-            startpos = random.randint(2, 3)
-    else:
-        startpos = random.randint(0, 3)
-
-    start = START_POSITIONS[startpos]
-    player_x = start[0]
-    player_y = start[1]
-    player_direction = start[2]
 
 #move arena sprite so the player is in the middle of the screen
 def updateScreen(arena):
@@ -407,53 +362,52 @@ def playerColor():
             color = PLAYER2
     return color
 
-def movePlayer(x,y,direction,throttle,game):
-    global virtual_screen
+class GameState():
+    def __init__(self, screen):
+        self.points = 0
+        self.won = True
+        self.screen = screen
+        # for explosions
+        self.bits = []
+        self.explosion = 0
 
-    # Turn left on LB
-    changed = False
-    if engine_io.LB.is_just_pressed:
-        direction = (direction - 1) % 4
-        changed = True
-
-    # Turn right on RB
-    if engine_io.RB.is_just_pressed:
-        direction = (direction + 1) % 4
-        changed = True
-
-    crash = False
-    if game.counter % throttle == 0:
-        x += PLAYERXADD[direction]
-        y += PLAYERYADD[direction]
-        
-        crash = virtual_screen.pixel(x, y) != BACKGROUND        
-        game.points += 1
-        changed = True
-   
-    return crash, changed, x , y, direction
-        
         
 def handlePlayer(multi,index):
-    global won
+    global virtual_screen
 
     x = multi.read("x",index)
     y = multi.read("y",index)
     direction = multi.read("d",index)
     throttle = multi.read("t",index)
-    crash2 = multi.read("c",1)
     crash1 = multi.read("c",0)
+    if multi.player_count == 2:
+        crash2 = multi.read("c",1)
+    else:
+        crash2 = 0
      
     # if no player has crashed move
     if (crash1 == 0) and (crash2 == 0):
-        crash, changed, x, y, direction = movePlayer(x,y,direction,throttle,multi)
-        if changed:
+        if engine_io.LB.is_just_pressed:
+            direction = (direction - 1) % 4
+            multi.write("d", direction,index)
+
+        # Turn right on RB
+        if engine_io.RB.is_just_pressed:
+            direction = (direction + 1) % 4
+            multi.write("d", direction,index)
+        
+        if multi.counter % throttle == 0:
+            x += PLAYERXADD[direction]
+            y += PLAYERYADD[direction]
             multi.write("x", x,index)
             multi.write("y", y,index)
-            multi.write("d", direction,index)
-        if crash:
-            multi.write("c", 1,index)
-            won = False
+            
+            multi.state.points += 1
 
+
+            if virtual_screen.pixel(x, y) != BACKGROUND:
+                multi.write("c", 1,index)
+                multi.state.won = False
 
 def cbclient(multi):
     handlePlayer(multi, 1)
@@ -463,18 +417,9 @@ def cbhost(multi):
 
 arena = None
 
-def pcolor(player):
-    if player == 0:
-        return PLAYER1
-    else:
-        return PLAYER2
-        
-
 def cbwork(multi):
     global arena
     global virtual_screen
-
-    explosian = multi.read("e")
 
     if multi.is_host():
         this = 0
@@ -482,51 +427,49 @@ def cbwork(multi):
         this = 1
 
     #draw player
-    startexplosion = False
-    for player in range(0,2):
+    for player in range(0,multi.player_count):
         x = multi.read("x", player)
         y = multi.read("y", player)
         c = multi.read("c", player)
         if c == 0:
-            virtual_screen.pixel(x, y, pcolor(player))
-        elif explosian == 0:
-            addexplosion(x,y)
-            startexplosion = True
+            multi.state.screen.pixel(x, y, PLAYER_COLOR[player])
+        elif c == 1:
+            addexplosion(x,y, multi.state)
+            multi.write("c",2,player)
         #center on this player            
         if player == this:
             screenx = SCREEN_WIDTH - x
             screeny = SCREEN_HEIGHT - y
             arena.position = Vector2(screenx, screeny)
-        
-    if startexplosion:
-        explosian = EXPLOSION_STEPS
 
-    if explosian > 0:
-        moveexplosion()
-        explosian -= 1
-        multi.write("e",explosian)
+    if multi.state.explosion > 0:
+        moveexplosion(multi.state)
+        multi.state.explosion -= 1
+
         #when explosion finshed stop ther game
-        if explosian == 0:
+        if multi.state.explosion == 0:
             time.sleep(0.5)        
             multi.cancel()
 
 def cbinit(multi):
     global speed
-
+    print("cbinit "+str(multi.player_count))
     throttle = 11 - speed
-    multi.write("e", 0)
 
-    for player in range (0,2):
-        startpos = random.randint(player*2, player*2+1)
+    for player in range (0,multi.player_count):
+        if multi.player_count == 1:
+            startpos = random.randint(0, 3)
+        else:
+            startpos = random.randint(player*2, player*2+1)
+        print("startpos "+str(startpos))    
         start = START_POSITIONS[startpos]
         multi.write("x", start[0], player)
         multi.write("y", start[1], player)
         multi.write("d", start[2], player)
         multi.write("t", throttle, player)
         multi.write("c", 0, player)
+        print(multi.debug())
          
-
-    
 
 
 def initScreen():
@@ -544,17 +487,97 @@ def initScreen():
 def finishScreen():    
     global arena
     arena.mark_destroy()
+
+fpscount = FPSAVERAGECOUNT
+fpssum = 0
+
+def addFPS():
+    global showfps
+    node = None
+    if showfps:
+        node =  Text2DNode(
+          position=Vector2(0, 0),
+          text="FPS",
+          font=font16,
+          line_spacing=1,
+          color=YELLOW,
+          scale=Vector2(1, 1),
+          layer=100
+        )
+        helper.align_top(node)
+        helper.align_left(node)
+    return node    
+        
+def updateFPS(fpsnode):
+    global fpscount
+    global fpssum 
+    global showfps
+    
+    if showfps:
+        fps = engine.get_running_fps()
+        fpssum += fps
+        fpscount -= 1
+        if fpscount == 0:
+            fpsnode.text = str(int(fpssum // FPSAVERAGECOUNT))
+            #helper.align_left(fpsnode)
+            fpssum = 0
+            fpscount = FPSAVERAGECOUNT
     
 
-def playMultiplayerGame():
-    global won
+    
+def playSingleplayerGame():
     global showfps
+    global virtual_screen
+    
+    engine.fps_limit(120)
+
+
+    multi = multiplayer.MultiplayerNode()
+    multi.state = GameState(virtual_screen)
+        
+    multi.register("x", multiplayer.VALUE_WORD)
+    multi.register("y", multiplayer.VALUE_WORD)
+    multi.register("d", multiplayer.VALUE_BYTE)
+    multi.register("t", multiplayer.VALUE_BYTE)
+    multi.register("c", multiplayer.VALUE_BYTE)    
+
+    multi.cb_init = cbinit
+    
+    if multi.start(False):
+        log.info("start ok")
+        initScreen()
+        multi.cb_host = cbhost
+        multi.cb_work = cbwork
+
+        fpsnode = addFPS()
+
+        while multi.running():
+            if engine.tick():
+                updateFPS(fpsnode)
+        print_memory_usage()
+        finishScreen()
+        points = multi.state.points
+        if showfps:
+            fpsnode.mark_destroy()
+
+
+    multi.mark_destroy()
+        
+    return points
+            
+
+
+def playMultiplayerGame():
+    global showfps
+    global virtual_screen
+    
     engine.fps_limit(120)
     
     multi = multiplayer.MultiplayerNode()
+    multi.state = GameState(virtual_screen)
+    
     multi.countdown = 2
-
-    won = True
+    
     bits = []
 
     multi.text_connecting = helper.Text("Connecting", font16,Vector2(1, 1), WHITE  )
@@ -571,12 +594,12 @@ def playMultiplayerGame():
     multi.register("d", multiplayer.VALUE_BYTE,2)
     multi.register("t", multiplayer.VALUE_BYTE,2)
     multi.register("c", multiplayer.VALUE_BYTE,2)    
-    multi.register("e", multiplayer.VALUE_BYTE)    
+
 
     multi.cb_init = cbinit
 
     log.info("before start")
-    multi.points = 0
+    
     if multi.start():
         log.info("start ok")
         initScreen()
@@ -584,46 +607,28 @@ def playMultiplayerGame():
         multi.cb_host = cbhost
         multi.cb_work = cbwork
         
-        if showfps:
-            fpsnode =  Text2DNode(
-              position=Vector2(0, 0),
-              text="FPS",
-              font=font16,
-              line_spacing=1,
-              color=YELLOW,
-              scale=Vector2(1, 1),
-              layer=100
-            )
-            helper.align_top(fpsnode)
-            helper.align_left(fpsnode)
-            fpscount = FPSAVERAGECOUNT
-            fpssum = 0
-
-        
+        fpsnode = addFPS()
         
         log.info("loop")
         while multi.running():
             if engine.tick():
-                if showfps:
-                    fps = engine.get_running_fps()
-                    fpssum += fps
-                    fpscount -= 1
-                    if fpscount == 0:
-                        fpsnode.text = str(fpssum // FPSAVERAGECOUNT)
-                        helper.align_left(fpsnode)
-                        fpssum = 0
-                        fpscount = FPSAVERAGECOUNT
+                updateFPS(fpsnode)
 
         finishScreen()
-        points = multi.points
-        if won:
-            points += POINTS_WON
+        points = multi.state.points
+        if multi.state.won:
+            points += POINTS_WON 
+        won = multi.state.won
+            
         if showfps:
             fpsnode.mark_destroy()
-            
+    else:
+        points = 0
+        won = False;
         
     multi.mark_destroy()
-    return points
+
+    return won, points
 
 
 def playGame():
@@ -927,8 +932,7 @@ def displayTitle():
     return page
 
 
-def displayPoints(points):
-    global won
+def displayPoints(points, won = True):
     global game_mode
 
     if game_mode == MODE_LINK:
@@ -1048,118 +1052,8 @@ def displayOptions():
 
     node.mark_destroy()
 
-def connected():
-    # Clear anything that might not be related to the game
-    engine_link.clear_send()
-    engine_link.clear_read()
 
-def waitForPlayer():
-    global game_mode
-    global first_player
-    global speed
-    
-    cancel = False
-
-    #log("Link")
-    #log("Mode: " + str(game_mode))
-    #log("Player: " + str(first_player + 1))
-    #log("Speed (before): " + str(speed))
-
-    connecting = Text2DNode(
-        position=Vector2(0, -30),
-        text="Connecting",
-        font=font16,
-        color=WHITE,
-        scale=Vector2(1, 1),
-    )
-
-    countdown = Text2DNode(
-        position=Vector2(0, 10),
-        text="",
-        font=font16,
-        color=WHITE,
-        scale=Vector2(3, 3),
-    )
-    
-    
-    wait_help = Text2DNode(
-        text="M Cancel",
-        font=font6,
-        color=WHITE,
-        scale=Vector2(1, 1),
-    )
-    align(wait_help, 0, 0, 1, 2, True, True)    
-
-    engine_link.set_connected_cb(connected)
-    engine_link.start()
-
-    engine.fps_limit(10)
-    # wait for connection
-    while True:
-        if engine.tick():
-            if engine_io.MENU.is_just_pressed:
-                log("Cancel Connect")
-                cancel = True
-                engine_link.stop()
-                break
-            if engine_link.connected():
-                break
-    if not cancel:
-        if engine_link.is_host():
-            #log("is host")
-            first_player = True
-        else:
-            #log("is client")
-            first_player = False
-
-        # send game settings
-        buffer = bytearray(9)
-        buffer[0] = KIND_SETTINGS
-        buffer[1] = (speed >> 0) & 0b11111111
-        #log("Buffer (send): " + str(buffer))
-
-        engine_link.send(buffer)
-
-        # wait for settings
-        while engine_link.available() < 9:
-            pass
-        engine_link.read_into(buffer, 9)
-        #log("Buffer (rcv): " + str(buffer))
-      
-        # use slower speed
-        kind = buffer[0]
-        remotespeed = buffer[1]
-        if kind == 1:
-            if remotespeed < speed:
-                speed = remotespeed
-
-        #wait for next tick to display countdown  
-        sleep_time = engine.time_to_next_tick() / 1000
-        time.sleep(sleep_time)
-        for count in range(5):
-            countdown.text = str(5 - count)
-            engine.tick()  # to update the text
-
-            buffer[0] = KIND_COUNTDOWN
-            buffer[1] = count # currently not used 
-            engine_link.send(buffer)
-            time.sleep(1)
-            # wait for the message from the other thumby
-            while engine_link.available() < 9:
-                pass
-            engine_link.read_into(buffer, 9)
-
-    connecting.mark_destroy()
-    countdown.mark_destroy()
-    wait_help.mark_destroy()
-    
-    if cancel:
-        return PAGE_TITLE
-    else:
-        return PAGE_GAME
-
-def addexplosion(x, y):
-    log.log("addexplosion "+str(x)+"/"+str(y))
+def addexplosion(x, y, state):
     for count in range(EXPLOSION_BITS):
         # x,y x speed, y speed
         bit = [
@@ -1168,18 +1062,16 @@ def addexplosion(x, y):
             (random.randint(0, 20) - 10) / 10,
             (random.randint(0, 20) - 10) / 10,
         ]
-        bits.append(bit)
+        state.bits.append(bit)
+    state.explosion = EXPLOSION_STEPS    
 
-def moveexplosion():
-    global virtual_screen
-    global bits
-    
+def moveexplosion(state):
     # remove from current position
-    for bit in bits:
-        virtual_screen.pixel(int(bit[0]), int(bit[1]), BACKGROUND)
+    for bit in state.bits:
+        state.screen.pixel(int(bit[0]), int(bit[1]), BACKGROUND)
         
     # move bits to new position
-    for bit in bits:
+    for bit in state.bits:
         bit[0] = bit[0] + bit[2]
         if bit[0] < 0:
             bit[0] = 0
@@ -1193,23 +1085,21 @@ def moveexplosion():
             bit[1] = VIRTUAL_HEIGHT - 1
 
     # draw at new position
-    for bit in bits:
-        virtual_screen.pixel(int(bit[0]), int(bit[1]), EXPLOSION)
-    
+    for bit in state.bits:
+        state.screen.pixel(int(bit[0]), int(bit[1]), EXPLOSION)
 
 
-
-log.info("main loop")
 page = 1
 while page != PAGE_QUIT:
     if page == PAGE_TITLE:
         page = displayTitle()
     if page == PAGE_GAME:
         if game_mode == MODE_LINK:
-            points = playMultiplayerGame()
+            won, points = playMultiplayerGame()
+            displayPoints(points, won)
         else:
-            points = playGame()
-        displayPoints(points)
+            points = playSingleplayerGame()
+            displayPoints(points)
         if (game_mode == MODE_FULL) or (game_mode == MODE_PURE):
             score.check(modeID(), points)
         page = PAGE_TITLE

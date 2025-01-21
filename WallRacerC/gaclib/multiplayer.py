@@ -91,7 +91,8 @@ class MultiplayerNode(EmptyNode):
         
         self.synced = False
         self.counter = 0
-        self.points = 0
+        self.state = None
+        self.player_count = 0 
         
         engine_link.set_connected_cb(connected)
         engine_link.set_disconnected_cb(disconnected)
@@ -100,7 +101,9 @@ class MultiplayerNode(EmptyNode):
         global cancel
         return self.synced and (not cancel)
     def is_host(self):
-        if self.hostmode == HOSTMODE_RANDOM:
+        if self.player_count == 1:
+            return True
+        elif self.hostmode == HOSTMODE_RANDOM:
             return engine_link.is_host()
         else:
            return self.host
@@ -108,6 +111,9 @@ class MultiplayerNode(EmptyNode):
     def debug(self):
         r = ""
         for value in self.values.values():
+            v=""
+            for index in range(0,value.count):
+                v=v+str(self.read(value.name,index))+','
             r = r + " "+ value.name +"("+str(value.type)+","+str(value.pos)+")="+str(self.read(value.name))
         return r
     
@@ -118,130 +124,145 @@ class MultiplayerNode(EmptyNode):
     def stop(self):
         engine_link.stop()
         
-    def start(self):
+        
+    def start(self, link = True):
         global cancel
-        
+        print("start")
+
         cancel = False
-        self.synced = False
-        nodeconnecting = Text2DNode(
-            position=Vector2(0, 0),
-            text=self.text_connecting.text,
-            font=self.text_connecting.font,
-            line_spacing=1,
-            color=self.text_connecting.color,
-            scale=self.text_connecting.scale,
-            )
-        self.add_child(nodeconnecting)
-        
-        nodecancel = Text2DNode(
-            position=Vector2(0, 0),
-            text=self.text_cancel.text,
-            font=self.text_cancel.font,
-            line_spacing=1,
-            color=self.text_cancel.color,
-            scale=self.text_cancel.scale,
-            )
-        helper.align_left(nodecancel, 0, self.width)
-        helper.align_bottom(nodecancel, 0, self.height)
-        self.add_child(nodecancel)
-        
-        engine_link.start()
-        while not engine_link.connected() and (not cancel):
-            if engine.tick():
-              if engine_io.MENU.is_just_pressed:
-                  cancel = True
 
-        nodeconnecting.mark_destroy()
-         
-        
-        if cancel:
-            engine_link.stop()
-            return False
-        
-        nodestart = Text2DNode(
-            position=Vector2(0, 0),
-            text=self.text_start.text,
-            font=self.text_start.font,
-            line_spacing=1,
-            color=self.text_start.color,
-            scale=self.text_start.scale,
-            )
-        self.add_child(nodestart)
-
-        
-        while not cancel:
-            if engine.tick():
-              if engine_io.MENU.is_just_pressed:
-                  cancel = True
-              if engine_io.A.is_just_pressed:
-                  break
-                
-        nodestart.mark_destroy()
-        nodecancel.mark_destroy()                   
-        
-        if cancel:
-            engine_link.stop()
-            return False        
-        
-        buffer = bytearray(2)
-        count = self.countdown
-
-        nodecountdown = Text2DNode(
-            position=Vector2(0, 0),
-            text=self.text_countdown.text,
-            font=self.text_countdown.font,
-            line_spacing=1,
-            color=self.text_countdown.color,
-            scale=self.text_countdown.scale,
-            )
-        self.add_child(nodecountdown)
-        
-        time.sleep(0.5)
-        engine.tick() #display the text
-        
-        while (count > 0) and (not cancel) :
- 
-            buffer[0] = 22 # just a marker, not used currently
-            buffer[1] = count # currently not used 
-            engine_link.send(buffer)
+        if link:
+            self.player_count = 2 
             
-            # wait for the message from the other thumby
-            while (engine_link.available() < 2) and (not cancel):
-                pass
-            if engine_link.available() >= 2:
-                engine_link.read_into(buffer, 2)
-                time.sleep(1)
+            self.synced = False
+            nodeconnecting = Text2DNode(
+                position=Vector2(0, 0),
+                text=self.text_connecting.text,
+                font=self.text_connecting.font,
+                line_spacing=1,
+                color=self.text_connecting.color,
+                scale=self.text_connecting.scale,
+                )
+            self.add_child(nodeconnecting)
             
-                nodecountdown.text = str(count) 
-                engine.tick()            
-                count -= 1
+            nodecancel = Text2DNode(
+                position=Vector2(0, 0),
+                text=self.text_cancel.text,
+                font=self.text_cancel.font,
+                line_spacing=1,
+                color=self.text_cancel.color,
+                scale=self.text_cancel.scale,
+                )
+            helper.align_left(nodecancel, 0, self.width)
+            helper.align_bottom(nodecancel, 0, self.height)
+            self.add_child(nodecancel)
+            
+            engine_link.start()
+            while not engine_link.connected() and (not cancel):
+                if engine.tick():
+                  if engine_io.MENU.is_just_pressed:
+                      cancel = True
+
+            nodeconnecting.mark_destroy()
+             
+            
+            if cancel:
+                engine_link.stop()
+                return False
+            
+            nodestart = Text2DNode(
+                position=Vector2(0, 0),
+                text=self.text_start.text,
+                font=self.text_start.font,
+                line_spacing=1,
+                color=self.text_start.color,
+                scale=self.text_start.scale,
+                )
+            self.add_child(nodestart)
+
+            
+            while not cancel:
+                if engine.tick():
+                  if engine_io.MENU.is_just_pressed:
+                      cancel = True
+                  if engine_io.A.is_just_pressed:
+                      break
+                    
+            nodestart.mark_destroy()
+            nodecancel.mark_destroy()                   
+            
+            if cancel:
+                engine_link.stop()
+                return False        
+            
+            buffer = bytearray(2)
+            count = self.countdown
+
+            nodecountdown = Text2DNode(
+                position=Vector2(0, 0),
+                text=self.text_countdown.text,
+                font=self.text_countdown.font,
+                line_spacing=1,
+                color=self.text_countdown.color,
+                scale=self.text_countdown.scale,
+                )
+            self.add_child(nodecountdown)
+            
+            time.sleep(0.5)
+            engine.tick() #display the text
+            
+            while (count > 0) and (not cancel) :
+     
+                buffer[0] = 22 # just a marker, not used currently
+                buffer[1] = count # currently not used 
+                engine_link.send(buffer)
                 
+                # wait for the message from the other thumby
+                while (engine_link.available() < 2) and (not cancel):
+                    pass
+                if engine_link.available() >= 2:
+                    engine_link.read_into(buffer, 2)
+                    time.sleep(1)
+                
+                    nodecountdown.text = str(count) 
+                    engine.tick()            
+                    count -= 1
+                    
+            
+            nodecountdown.mark_destroy()
+            
+            if cancel:
+                engine_link.stop()
+                return False
+            
+            time.sleep(0.5)
+            engine.tick() 
         
-        nodecountdown.mark_destroy()
-        
-        if cancel:
-            engine_link.stop()
-            return False
-        
-        time.sleep(0.5)
-        engine.tick() 
-    
-        if self.is_host():
-            #engine_io.indicator(engine_draw.red)
-            #host ini buffer and send
+            if self.is_host():
+                #engine_io.indicator(engine_draw.red)
+                #host ini buffer and send
+                if self.cb_init != None:
+                    self.cb_init(self)
+                engine_link.send(self.buffer)
+            else:
+                #engine_io.indicator(engine_draw.yellow)
+                #client read init buffer
+                while  engine_link.available() < self.size:
+                    pass
+                engine_link.read_into(self.buffer, self.size)
+            #engine_io.indicator(engine_draw.green)
+                     
+            self.synced = True
+            return True
+        else:
+            #singleplayer
+            self.player_count = 1 
             if self.cb_init != None:
                 self.cb_init(self)
-            engine_link.send(self.buffer)
-        else:
-            #engine_io.indicator(engine_draw.yellow)
-            #client read init buffer
-            while  engine_link.available() < self.size:
-                pass
-            engine_link.read_into(self.buffer, self.size)
-        #engine_io.indicator(engine_draw.green)
-                 
-        self.synced = True
-        return True
+            
+            self.synced = True
+            
+            return True
             
     def register(self,name: str, type, count=1):
         v = Value(name,type,self.datapos, count)
@@ -251,14 +272,23 @@ class MultiplayerNode(EmptyNode):
         self.buffer = bytearray(self.size)
         return v.pos
     
-    def write_byte(self, pos,value):
+    #@micropython.viper
+    #def write_byte(self, pos = int, value = int):
+    #    buf = ptr8(self.buffer)
+    #    v = int(value)
+    #    p = int(pos)
+    #    buf[p] = v & 0b11111111
+        
+    @micropython.viper    
+    def write_byte(self, pos = int ,value = int):
+        self.buffer[pos] = int(value) & 0b11111111
+        
+    @micropython.viper    
+    def write_word(self, pos = int,value = int):
+        p = int(pos)
         v = int(value)
         self.buffer[pos] = v & 0b11111111
-
-    def write_word(self, pos,value):
-        v = int(value)
-        self.buffer[pos] = v & 0b11111111
-        self.buffer[pos+1] = (v >> 8)  & 0b11111111
+        self.buffer[p+1] = (v >> 8) & 0b11111111
             
     def write(self, name, value, index = 0):
         v = self.values[name]
@@ -269,11 +299,16 @@ class MultiplayerNode(EmptyNode):
             self.write_word(pos, value)
             
                                     
-    def read_byte(self,pos):
-        return self.buffer[pos]
+    @micropython.viper
+    def read_byte(self, pos = int) -> int:
+        return int(self.buffer[pos])
     
-    def read_word(self,pos):
-        v = self.buffer[pos] + (self.buffer[pos+1] << 8 )
+    @micropython.viper
+    def read_word(self, pos = int) -> int:
+        p = int(pos)
+        v = int(self.buffer[p])
+        x = int(self.buffer[p+1])
+        v = int(v + (x << 8 ))
         return v
     
     def read(self,name,index = 0):
@@ -286,32 +321,38 @@ class MultiplayerNode(EmptyNode):
         
     def tick(self, dt):
         global cancel
-        if self.synced and engine_link.connected() and (not cancel):
-            if self.is_host():
-                #wait for data from client
-                while  engine_link.available() < self.size:
-                    pass
-                    #log(str(engine_link.available()))
-                engine_link.read_into(self.buffer, self.size)
-                if self.cb_host != None:
-                    self.cb_host(self)  
+        if self.player_count == 2:
+            if self.synced and engine_link.connected() and (not cancel):
+                if self.is_host():
+                    #wait for data from client
+                    while  engine_link.available() < self.size:
+                        pass
+                        #log(str(engine_link.available()))
+                    engine_link.read_into(self.buffer, self.size)
+                    if self.cb_host != None:
+                        self.cb_host(self)  
 
-                engine_link.send(self.buffer)
-                
-                if self.cb_work != None:
-                    self.cb_work(self)                  
-
-            else:
-                if self.cb_client != None:
-                    self.cb_client(self)
-                engine_link.send(self.buffer)
-                while engine_link.available() < self.size:
-                    pass
+                    engine_link.send(self.buffer)
                     
-                engine_link.read_into(self.buffer, self.size)
-                if self.cb_work != None:
-                    self.cb_work(self)  
-            self.counter += 1
+                    if self.cb_work != None:
+                        self.cb_work(self)                  
+
+                else:
+                    if self.cb_client != None:
+                        self.cb_client(self)
+                    engine_link.send(self.buffer)
+                    while engine_link.available() < self.size:
+                        pass
+                        
+                    engine_link.read_into(self.buffer, self.size)
+                    if self.cb_work != None:
+                        self.cb_work(self)
+        else:
+            if self.cb_host != None:
+                self.cb_host(self)  
+            if self.cb_work != None:
+                self.cb_work(self)
+        self.counter += 1
     
  
         
