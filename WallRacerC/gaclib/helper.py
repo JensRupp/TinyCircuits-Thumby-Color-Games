@@ -56,14 +56,12 @@ def word_wrap(text,font: FontResource, scale: Vector2, width):
                            1,
                            0,
                            0)
-          #print(temp+" = " + str(tempnode.width))
           if (tempnode.width < width) or first:
               #word does fit
               buildline = temp
           else:
               # word does not fit
               full = full + buildline + "\n"
-              #print("Full: " + full)
               buildline = word
           tempnode.mark_destroy()              
           first = False    

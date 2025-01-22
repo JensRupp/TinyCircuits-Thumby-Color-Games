@@ -7,7 +7,7 @@ import engine
 import engine_io
 from engine_math import Vector2
 
-VERSION = "0.2"
+VERSION = "0.3"
 
 HOSTMODE_RANDOM = 0
 HOSTMODE_HOST = 1   #not implemented yet
@@ -127,8 +127,7 @@ class MultiplayerNode(EmptyNode):
         
     def start(self, link = True):
         global cancel
-        print("start")
-
+        
         cancel = False
 
         if link:
@@ -272,13 +271,7 @@ class MultiplayerNode(EmptyNode):
         self.buffer = bytearray(self.size)
         return v.pos
     
-    #@micropython.viper
-    #def write_byte(self, pos = int, value = int):
-    #    buf = ptr8(self.buffer)
-    #    v = int(value)
-    #    p = int(pos)
-    #    buf[p] = v & 0b11111111
-        
+       
     @micropython.viper    
     def write_byte(self, pos = int ,value = int):
         self.buffer[pos] = int(value) & 0b11111111
@@ -327,7 +320,6 @@ class MultiplayerNode(EmptyNode):
                     #wait for data from client
                     while  engine_link.available() < self.size:
                         pass
-                        #log(str(engine_link.available()))
                     engine_link.read_into(self.buffer, self.size)
                     if self.cb_host != None:
                         self.cb_host(self)  
