@@ -37,12 +37,14 @@ class OptionsValue():
 #values: list of GacOptionsValue
 #default: default value used for this option, this  is the id from the values list        
 class OptionsItem():
-    def __init__(self, text: str, help: str, id, values, default):
+    def __init__(self, text: str, help: str, id, values, default, refresh = False, conditions = []):
         self.text = text
         self.help = help
         self.id = id
         self.default = default
         self.values = values
+        self.conditions = conditions
+        self.refresh = refresh
     
     #find the index of the currently selected value
     def getindex(self,data):
@@ -101,12 +103,12 @@ class OptionsNode(EmptyNode):
         self.table = None
         self.mark_destroy_children()
             
-    def addoption(self, text, help, id, value, default):
-        item = OptionsItem(text, help, id, value, default)
+    def addoption(self, text, help, id, value, default, refresh = False, conditions = []):
+        item = OptionsItem(text, help, id, value, default, refresh, conditions)
         self.options.append(item)
         
     def callback(self):
-        self.infonode.text = str(self.table.selectedrow+1)+"/"+str(len(self.options))+"\n"+self.info.text
+        self.infonode.text = str(self.table.selectedrow+1)+"/"+str(len(self.table.rows))+"\n"+self.info.text
         helper.align_right(self.infonode)
            
     def initoptions(self):
@@ -121,10 +123,25 @@ class OptionsNode(EmptyNode):
         helper.align_top(self.table, self.titlenode.height + 4)
 
 
-        for option in self.options:
-            self.data.setdefault(option.id, option.default)
-            row = [option.text, option.getvalue(self.data)]
-            self.table.add_row(row)
+        for index, option in enumerate(self.options):
+            if len(option.conditions) > 0:
+                orcheck = False
+                for orcond in option.conditions:
+                    andcheck = True
+                    for andcond in orcond:
+                        print(andcond)
+                        print(andcond[0])
+                        print(self.data)
+                        v = self.data[andcond[0]]
+                        if v != andcond[1]:
+                            andcheck = False
+                    orcheck = orcheck or andcheck
+            else:
+                orcheck = True
+            if orcheck:
+                self.data.setdefault(option.id, option.default)
+                row = [option.text, option.getvalue(self.data)]
+                self.table.add_row(row, index)
 
         self.add_child(self.table)
             
@@ -182,7 +199,16 @@ class OptionsNode(EmptyNode):
         
         if (self.infonode.position.y - 2) < self.listbottom:
             self.listbotom = self.infonode.position.y - 2
-            
+         
+    def refresh(self):
+        selectedrow = self.table.selectedrow
+        selectedcol = self.table.selectedcol
+        self.clear()
+        self.init()
+        self.initoptions()
+        self.table.selectedrow = selectedrow
+        self.table.selectedcol = selectedcol
+         
     def initHelp(self,text):
         #remember selection
         self.selectedrow = self.table.selectedrow
@@ -232,18 +258,26 @@ class OptionsNode(EmptyNode):
         if engine_io.A.is_just_pressed:
             self.quit = True
         if engine_io.B.is_just_pressed:
-            s = self.options[self.table.selectedrow].help
+            s = self.options[self.table.get_id()].help
             if not (s == ""):
                 self.initHelp(s)
                 self.mode = MODE_HELP
                 engine_io.release_all_buttons()
         if engine_io.RIGHT.is_pressed_autorepeat:
-            self.options[self.table.selectedrow].incvalue(self.data)
-            self.table.set_text(1,self.table.selectedrow,self.options[self.table.selectedrow].getvalue(self.data))    
+            self.options[self.table.get_id()].incvalue(self.data)
+            self.table.set_text(1,self.table.selectedrow,self.options[self.table.get_id()].getvalue(self.data))
+            
+            if self.options[self.table.get_id()].refresh:
+                self.refresh()
+            
             self.changed = True
         if engine_io.LEFT.is_pressed_autorepeat:
-            self.options[self.table.selectedrow].decvalue(self.data)
-            self.table.set_text(1,self.table.selectedrow,self.options[self.table.selectedrow].getvalue(self.data))    
+            self.options[self.table.get_id()].decvalue(self.data)
+            self.table.set_text(1,self.table.selectedrow ,self.options[self.table.get_id()].getvalue(self.data))
+            if self.options[self.table.get_id()].refresh:
+                self.refresh()
+            
+            
             self.changed = True
 
     def modeHelp(self):

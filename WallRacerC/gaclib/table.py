@@ -29,6 +29,7 @@ class TableNode(EmptyNode):
         self.selcolor = color
         self.layer = layer
         self.rows = []
+        self.id = []
         self.top = 0
         self.left = 0
         self.selection = SELECTION_NONE
@@ -40,8 +41,9 @@ class TableNode(EmptyNode):
         #print("height: "+str(self.height)+" rowheight="+str(self.rowheight)+" rowcount="+str(self.rowcount))
         self.changed = True
         
-    def add_row(self, row):
+    def add_row(self, row, id = 0):
         nodes = []
+        
         for col in row:
             text = Text2DNode(Vector2(0,0),
                            self.font,
@@ -61,12 +63,14 @@ class TableNode(EmptyNode):
             
             nodes.append(text)
         self.rows.append(nodes)
+        self.id.append(id)
         self.changed = True
              
     
     def clear(self):
         self.mark_destroy_children()
         self.rows = []
+        self.id = []
         self.changed = True
                 
     def get_node(self, x: int,y: int):
@@ -77,6 +81,9 @@ class TableNode(EmptyNode):
         if node.text != text:
             node.text = text
             self.changed = True
+            
+    def get_id(self):
+        return self.id[self.selectedrow]
     
     def set_color(self, x: int, y: int, color: Color):
         node = self.get_node(x,y)

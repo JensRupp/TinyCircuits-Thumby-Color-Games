@@ -777,6 +777,9 @@ def displayOptions():
     global speed
     global showfps
     
+    offon = [options.OptionsValue("Off", False),
+             options.OptionsValue("On", True)]
+    
     title = helper.Text("Options",font16,Vector2(1.5, 1.5),WHITE)
     help = helper.Text("U/D Select\nL/R Change\nA Ok B Help",font6,Vector2(1, 1),YELLOW)
     info = helper.Text(VERSION,font6,Vector2(1, 1), YELLOW)
@@ -805,7 +808,12 @@ def displayOptions():
              )
     
     helptext = helper.word_wrap(helptext, font16, Vector2(1,1), SCREEN_WIDTH)
-    node.addoption("Mode:", helptext,"mode", gamemodes, game_mode)
+    node.addoption("Mode:", helptext,"mode", gamemodes, game_mode, True)
+
+
+    node.addoption("Full","","t1", offon , 0, False, [[("mode", MODE_FULL)]])
+    node.addoption("L+P","","t2", offon , 0, False, [[("mode", MODE_LINK)],[("mode", MODE_PURE)]])
+
 
     helptext=("Speed of the game, 10 is fastest.\n"
               "There is a highscore for each speed.\n"
@@ -816,11 +824,12 @@ def displayOptions():
 
     node.addoption("Speed:",helptext ,"speed", gamespeeds, speed)
     
-    offon = [options.OptionsValue("Off", False),
-             options.OptionsValue("On", True)
-            ]
+            
 
-    node.addoption("ShowFPS:", "", "showfps", offon, showfps)
+    node.addoption("ShowFPS:", "", "showfps", offon, showfps, True)
+    
+    node.addoption("Test","","t3", offon , 0, False, [[("mode", MODE_FULL), ("showfps", True)]])
+    
     
     node.show()
     
