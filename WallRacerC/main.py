@@ -177,8 +177,8 @@ def addBonus(multi):
 
         # check distance to players
         for player in range(0,multi.player_count):
-            player_x = multi.read("x", player)
-            player_y = multi.read("y", player)
+            player_x = multi.readi("x", player)
+            player_y = multi.readi("y", player)
             if (
                 (x >= player_x - BONUS_DISTANCE)
                 and (x <= player_x + BONUS_DISTANCE)
@@ -318,13 +318,13 @@ def handlePlayer(multi,index):
             multi.state.bonus1.mark_destroy()
             multi.state.bonus2.mark_destroy()
     else:
-        x = multi.read("x",index)
-        y = multi.read("y",index)
-        direction = multi.read("d",index)
+        x = multi.readi("x",index)
+        y = multi.readi("y",index)
+        direction = multi.readi("d",index)
         
-        crash1 = multi.read("c",0)
+        crash1 = multi.readi("c",0)
         if multi.player_count == 2:
-            crash2 = multi.read("c",1)
+            crash2 = multi.readi("c",1)
         else:
             crash2 = 0
          
@@ -332,12 +332,12 @@ def handlePlayer(multi,index):
         if (crash1 == 0) and (crash2 == 0):
             if engine_io.LB.is_just_pressed:
                 direction = (direction - 1) % 4
-                multi.write("d", direction,index)
+                multi.writei("d", direction,index)
 
             # Turn right on RB
             if engine_io.RB.is_just_pressed:
                 direction = (direction + 1) % 4
-                multi.write("d", direction,index)
+                multi.writei("d", direction,index)
                 
             # Start boost on B
             if multi.state.hasboost and (multi.state.boost == 0) and engine_io.B.is_just_pressed:
@@ -368,8 +368,8 @@ def handlePlayer(multi,index):
                 
                 x += PLAYERXADD[direction]
                 y += PLAYERYADD[direction]
-                multi.write("x", x,index)
-                multi.write("y", y,index)
+                multi.writei("x", x,index)
+                multi.writei("y", y,index)
                 
                 multi.state.points += 1
 
@@ -386,7 +386,7 @@ def handlePlayer(multi,index):
 
 
                 if multi.state.screen.pixel(x, y) != BACKGROUND:
-                    multi.write("c", 1,index)
+                    multi.writei("c", 1,index)
                     multi.state.won = False
 
 # speed calculation:
@@ -422,14 +422,14 @@ def cbwork(multi):
 
     #draw player
     for player in range(0,multi.player_count):
-        x = multi.read("x", player)
-        y = multi.read("y", player)
-        c = multi.read("c", player)
+        x = multi.readi("x", player)
+        y = multi.readi("y", player)
+        c = multi.readi("c", player)
         if c == 0:
             multi.state.screen.pixel(x, y, PLAYER_COLOR[player])
         elif c == 1:
             addexplosion(x,y, multi.state)
-            multi.write("c",2,player)
+            multi.writei("c",2,player)
         #center on this player            
         if player == this:
             screenx = SCREEN_WIDTH - x
@@ -463,13 +463,14 @@ def cbinit(multi):
             startpos = random.randint(player*2, player*2+1)
        
         start = START_POSITIONS[startpos]
-        multi.write("x", start[0], player)
-        multi.write("y", start[1], player)
-        multi.write("d", start[2], player)
-        multi.write("c", 0, player)
+        multi.writei("x", start[0], player)
+        multi.writei("y", start[1], player)
+        multi.writei("d", start[2], player)
+        multi.writei("c", 0, player)
         
     if multi.state.hasbonus:       
         initBonus(multi)
+
 
 
 def initScreen():
@@ -527,7 +528,7 @@ def playSingleplayerGame():
     global virtual_screen
     global game_mode
     
-    engine.fps_limit(60)
+    engine.fps_limit(120)
 
 
     multi = multiplayer.MultiplayerNode()
@@ -578,7 +579,7 @@ def playMultiplayerGame():
     global showfps
     global virtual_screen
     
-    engine.fps_limit(60)
+    engine.fps_limit(120)
     
     multi = multiplayer.MultiplayerNode()
     multi.state = GameState(virtual_screen)
@@ -777,59 +778,14 @@ def displayOptions():
     global speed
     global showfps
     
-    offon = [options.OptionsValue("Off", False),
-             options.OptionsValue("On", True)]
-    
     title = helper.Text("Options",font16,Vector2(1.5, 1.5),WHITE)
     help = helper.Text("U/D Select\nL/R Change\nA Ok B Help",font6,Vector2(1, 1),YELLOW)
     info = helper.Text(VERSION,font6,Vector2(1, 1), YELLOW)
     listformat = options.OptionsFormat(font16, Vector2(1, 1),WHITE, GREEN, 84)
 
-    gamemodes = [options.OptionsValue("Full",MODE_FULL),
-                 options.OptionsValue("Pure",MODE_PURE),
-                 options.OptionsValue("Link",MODE_LINK),
-                ]
-
-
-
-    gamespeeds = []
-    for sp in range(1,11):
-        gamespeeds.append(options.OptionsValue(str(sp),sp))
-
     data={}
     node =  options.OptionsNode(title, help, info, listformat, BLACK, data)
-    helptext=("Dont crash in any Wall. Use left and right shoulder buttons to stear.\n\n"
-              "Full\n"
-              "Collect flashing dots for bonus points.\n\n"
-              "Pure\n"
-              "Just you and the line.\n\n"
-              "Link\n"
-              "Multiplayer using a link cable. Use B for temporary speed boost. Line color shows if ready to boost."
-             )
-    
-    helptext = helper.word_wrap(helptext, font16, Vector2(1,1), SCREEN_WIDTH)
-    node.addoption("Mode:", helptext,"mode", gamemodes, game_mode, True)
-
-
-    node.addoption("Full","","t1", offon , 0, False, [[("mode", MODE_FULL)]])
-    node.addoption("L+P","","t2", offon , 0, False, [[("mode", MODE_LINK)],[("mode", MODE_PURE)]])
-
-
-    helptext=("Speed of the game, 10 is fastest.\n"
-              "There is a highscore for each speed.\n"
-              "Boost in link mode is speed + 3 so use a maximum of 7 for link mode."
-             )
-    
-    helptext = helper.word_wrap(helptext, font16, Vector2(1,1), SCREEN_WIDTH)
-
-    node.addoption("Speed:",helptext ,"speed", gamespeeds, speed)
-    
-            
-
-    node.addoption("ShowFPS:", "", "showfps", offon, showfps, True)
-    
-    node.addoption("Test","","t3", offon , 0, False, [[("mode", MODE_FULL), ("showfps", True)]])
-    
+    node.load("wallracer.options")
     
     node.show()
     

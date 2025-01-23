@@ -7,6 +7,7 @@ from engine_resources import FontResource
 from engine_draw import Color, set_background_color
 from math import ceil
 from gaclib import helper
+import json
 
 
 SCREEN_WIDTH = 128
@@ -107,6 +108,20 @@ class OptionsNode(EmptyNode):
         item = OptionsItem(text, help, id, value, default, refresh, conditions)
         self.options.append(item)
         
+    def load(self, filename):
+        optionstext = open(filename,'r').read()
+        options = json.loads(optionstext)
+        optionslist = options["options"]
+        for option in optionslist:
+            values = []
+            for v in option["values"]:
+                values.append(OptionsValue(v[0],v[1]))
+                
+            help = helper.word_wrap(option["help"], self.list.font, self.list.font, self.width)
+                
+            self.addoption(option["text"], help, option["id"], values, option["default"], option["refresh"], option["conditions"])
+          
+        
     def callback(self):
         self.infonode.text = str(self.table.selectedrow+1)+"/"+str(len(self.table.rows))+"\n"+self.info.text
         helper.align_right(self.infonode)
@@ -129,9 +144,6 @@ class OptionsNode(EmptyNode):
                 for orcond in option.conditions:
                     andcheck = True
                     for andcond in orcond:
-                        print(andcond)
-                        print(andcond[0])
-                        print(self.data)
                         v = self.data[andcond[0]]
                         if v != andcond[1]:
                             andcheck = False

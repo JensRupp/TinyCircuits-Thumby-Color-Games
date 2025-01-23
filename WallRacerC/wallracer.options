@@ -1,0 +1,113 @@
+{
+  "options": [
+    {
+      "id": "speed",
+      "text": "Speed",
+      "help": "Speed of the game, 10 is fastest.",
+      "values": [
+        ["1", 1]  ,
+        ["2", 2]  ,
+        ["3", 3]  ,
+        ["4", 4]  ,
+        ["5", 5]  ,
+        ["6", 6]  ,
+        ["7", 7]  ,
+        ["8", 8]  ,
+        ["9", 9]  ,
+        ["10", 10]
+      ],
+      "default": 5,
+      "refresh": false,
+      "conditions": [[]]
+    },
+    {
+      "id": "link",
+      "text": "Link",
+      "help": "Select YES if you have two thumbies connected by a link cable",
+      "values": [ ["YES", true], ["NO", false] ],
+      "default": false,
+      "refresh": true,
+      "conditions": [[]]
+    },
+    {
+      "id": "player2t",
+      "text": "Player",
+      "help": "Number of players on two connected thumbies",
+      "values": [ ["1V1P", 1], ["2v2P", 2], ["3v3P", 3] ],
+      "default": 1,
+      "refresh": true,
+      "conditions": [
+        [ ["link", true] ]
+      ]
+    },
+    {
+      "id": "player1t",
+      "text": "Player",
+      "help": "Number of players on one thumby.",
+      "values": [ ["1P", 1], ["2P", 2], ["3P", 3] ],
+      "default": 1,
+      "refresh": true,
+      "conditions": [
+        [ ["link", false] ]
+      ]
+    },
+    {
+      "id": "arena",
+      "text": "Arena",
+      "help": "Size of the playing field.",
+      "values": [ ["S", 1], ["M", 2], ["L", 3] ],
+      "default": 3,
+      "refresh": false,
+      "conditions": [
+        [ ["link", true] ],
+        [ ["link", false] ,["player1t",1]]
+      ]
+    },
+    {
+      "id": "arenasmall",
+      "text": "Arena",
+      "help": "Multiplayer on one thumby only supports small arena",
+      "values": [ ["S", 1] ],
+      "default": 1,
+      "refresh": false,
+      "conditions": [
+                [ ["link", false] ,["player1t",2]],
+                [ ["link", false] ,["player1t",3]]
+      ]
+    },
+    {
+      "id": "boost",
+      "text": "Boost",
+      "help": "",
+      "values": [ ["Dots", 1], ["Time", 2], ["Off", 3] ],
+      "default": 1,
+      "refresh": false,
+      "conditions": [
+        [ ["link", true] ]
+      ]
+    },
+    {
+      "id": "bonus",
+      "text": "Bonus",
+      "help": "",
+      "values": [ ["Dots", 1], ["Off", 2] ],
+      "default": 1,
+      "refresh": false,
+      "conditions": [
+        [ ["link", false] ]
+      ]
+    },
+    {
+      "id": "showfps",
+      "text": "ShowFPS",
+      "help": "",
+      "values": [ ["YES", true], ["NO", false] ],
+      "default": false,
+      "refresh": false,
+      "conditions": [[]]
+    }
+
+    
+    
+  ]
+}
