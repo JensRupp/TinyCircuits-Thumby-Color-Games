@@ -53,11 +53,6 @@ START_POSITIONS = [
 ]
 FPSAVERAGECOUNT = 10
 
-# game modes
-MODE_FULL = 0
-MODE_PURE = 1
-MODE_LINK = 2
-
 # pages
 PAGE_QUIT = 0
 PAGE_TITLE = 1
@@ -131,40 +126,70 @@ def initHighscore():
     score = highscore.highscore(showtitle, showsubtitle, showfooter, showtable, entertitle, enterfooter, letter, WHITE, 10, "wallracer.data")
 
     #register all possible highscore ids
-    for mode in range(0,2):
-        if mode == MODE_FULL:
-            ext = "Full"
-        else:
-            ext = "Pure"            
-        
-        for speed in range(1,11):
-            id=str(mode)+'-'+str(speed)
-            name = ext +" Speed " + str(speed)
-            score.register(id, name, 100, "GAC")
+    for speed in range(1,11):
+        for arena in range (1,4):
+            for bonus in range (1,3):
+                id = "S"+str(speed)+"A"+str(arena)+"B"+str(bonus)
+                name = id
+                score.register(id, name, 100, "GAC")
             
-    return score 
+    return score
 
-def loadSettings():
-    global game_mode
-    global speed
-    engine_save.set_location("wallracer.data")
-    game_mode = engine_save.load("gamemode", MODE_FULL)
-    speed = engine_save.load("speed", 5) 
+class Settings():
+    def __init__(self):
+        #empty data sets defaults
+        self.set({})
+        
+    def get(self):
+        data = {}
+        #these names must match the definitions in wallracer.options
+        data["speed"] = self.speed
+        data["link"] = self.link
+        data["player1t"] = self.player1t
+        data["player2t"] = self.player2t
+        data["arena"] = self.arena
+        data["arenasmall"] = self.arenasmall
+        data["boost"] = self.boost
+        data["bonus"] = self.bonus
+        data["showfps"] = self.showfps
+        return data
     
-def saveSettings():
-    global game_mode
-    global speed
-    engine_save.set_location("wallracer.data")
-    engine_save.save("gamemode", game_mode)
-    engine_save.save("speed", speed) 
+    def set(self, data):
+        self.speed = data.get("speed", 5)
+        self.link = data.get("link", False)
+        self.player1t = data.get("player1t",1)
+        self.player2t = data.get("player2t",1)
+        self.arena = data.get("arena",3)
+        self.arenasmall = data.get("arenasmall",1)
+        self.boost = data.get("boost",1)
+        self.bonus = data.get("bonus",1)
+        self.showfps = data.get("showfps", False)
+        
+    def highscore_id(self):
+        #highscore for now only on single player
+        if (not self.link) and (self.player1t == 1):
+            id = "S"+str(self.speed)+"A"+str(self.arena)+"B"+str(self.bonus)    
+        else:    
+            id = ""
+        return id    
+        
+        
+    def save(self):
+        engine_save.set_location("wallracer.data")    
+        data = self.get()
+        data_json = json.dumps(data)
+        engine_save.save("options", data_json)
+    
+    def load(self):
+        engine_save.set_location("wallracer.data")
+        data_json = engine_save.load("options", json.dumps(self.get()))
+        data = json.loads(data_json)
+        self.set(data)
 
+# Global Settings
+settings = Settings()
+settings.load()
 
-# Global Vars
-speed = 5  # speed of the game
-game_mode = MODE_FULL  # 0 = full with bonus dots 1 = pure 2 = multiplayer
-showfps = False
-
-loadSettings()
 score = initHighscore()
 
 # Add a bonus dot at random position but keep distance to other dots and player
@@ -289,6 +314,7 @@ class GameState():
         self.won = True
         self.screen = screen
         self.arena = None
+        self.speed = 0 #set from settings
         # for explosions
         self.bits = []
         self.explosion = 0
@@ -395,12 +421,11 @@ def handlePlayer(multi,index):
 # client uses the sameller value to init throttle
 # host reads trhe possibly upüdates "speed" and uses that to init throttle
 def cbclient(multi):
-    global speed
     #init speed on minimum of host and client
     if multi.state.throttle == 0:
         hostspeed = multi.read("speed")
-        if speed < hostspeed:
-            hostspeed = speed
+        if multi.state.speed < hostspeed:
+            hostspeed = multi.state.speed
             multi.write("speed",hostspeed)
         multi.state.throttle = 11 - hostspeed
     
@@ -452,9 +477,8 @@ def cbwork(multi):
 
 # initialize the synced data on the host
 def cbinit(multi):
-    global speed
-
-    multi.write("speed", speed)
+    
+    multi.write("speed", multi.state.speed)
 
     for player in range (0,multi.player_count):
         if multi.player_count == 1:
@@ -490,9 +514,9 @@ fpscount = FPSAVERAGECOUNT
 fpssum = 0
 
 def addFPS():
-    global showfps
+    global settings
     node = None
-    if showfps:
+    if settings.showfps:
         node =  Text2DNode(
           position=Vector2(0, 0),
           text="FPS",
@@ -509,9 +533,9 @@ def addFPS():
 def updateFPS(fpsnode):
     global fpscount
     global fpssum 
-    global showfps
+    global setttings
     
-    if showfps:
+    if settings.showfps:
         fps = engine.get_running_fps()
         fpssum += fps
         fpscount -= 1
@@ -524,18 +548,17 @@ def updateFPS(fpsnode):
 
     
 def playSingleplayerGame():
-    global showfps
+    global settings
     global virtual_screen
-    global game_mode
     
     engine.fps_limit(120)
 
-
     multi = multiplayer.MultiplayerNode()
     multi.state = GameState(virtual_screen)
+    multi.state.speed = settings.speed
     
     # Bonus dots only for full game
-    if game_mode == MODE_FULL:
+    if settings.bonus == 1:
         multi.state.hasbonus = True
     
 
@@ -560,34 +583,41 @@ def playSingleplayerGame():
             if engine.tick():
                 updateFPS(fpsnode)
 
+        multi.cb_host = None
+        multi.cb_work = None
+
         finishScreen(multi.state.arena)
         points = multi.state.points
-        if showfps:
+        if settings.showfps:
             fpsnode.mark_destroy()
 
 
     multi.mark_destroy()
     engine_io.rumble(0)
-    
-
         
     return points
             
 
 
 def playMultiplayerGame():
-    global showfps
+    global settings
     global virtual_screen
     
     engine.fps_limit(120)
     
     multi = multiplayer.MultiplayerNode()
     multi.state = GameState(virtual_screen)
-    multi.state.hasboost = True
+    multi.state.speed = settings.speed
     
-    if multi.state.hasboost:
-        multi.state.boost = -BOOST_COOLDOWN
+    if settings.boost == 1:
+        multi.state.hasboost = True
+        multi.state.boost = 0 # start witrh 0 collected dots
+    elif settings.boost == 2:
+        multi.state.hasboost = True
+        multi.state.boost = -BOOST_COOLDOWN  # start with charging
         engine_io.indicator(engine_draw.blue)
+    else:    
+        multi.state.hasboost = False
     
     multi.countdown = 2
     
@@ -625,13 +655,16 @@ def playMultiplayerGame():
             if engine.tick():
                 updateFPS(fpsnode)
 
+        multi.cb_host = None
+        multi.cb_work = None
+
         finishScreen(multi.state.arena)
         points = multi.state.points
         if multi.state.won:
             points += POINTS_WON 
         won = multi.state.won
             
-        if showfps:
+        if settings.showfps:
             fpsnode.mark_destroy()
     else:
         points = 0
@@ -707,8 +740,9 @@ def displayTitle():
                 page = PAGE_QUIT
                 break
             if engine_io.UP.is_just_pressed:
-                page = PAGE_HIGHSCORE
-                break
+                if settings.highscore_id() != "":
+                    page = PAGE_HIGHSCORE
+                    break
     logo_node.mark_destroy()
     text1.mark_destroy()
     text2.mark_destroy()
@@ -716,9 +750,9 @@ def displayTitle():
 
 
 def displayPoints(points, won = True):
-    global game_mode
+    global settings
 
-    if game_mode == MODE_LINK:
+    if settings.link:
         if won:
             text = "Victory!"
         else:
@@ -760,40 +794,27 @@ def displayPoints(points, won = True):
     pointst.mark_destroy()
     points.mark_destroy()
 
-def modeID():
-    global speed
-    global game_mode
-    
-    m = game_mode
-    if m == MODE_LINK:
-        m = MODE_FULL
-    
-    return str(m)+"-"+str(speed)
 
 def displayHighscore():
-    score.show(modeID())
+    score.show(settings.highscore_id())
    
 def displayOptions():
-    global game_mode
-    global speed
-    global showfps
+    global options
     
     title = helper.Text("Options",font16,Vector2(1.5, 1.5),WHITE)
     help = helper.Text("U/D Select\nL/R Change\nA Ok B Help",font6,Vector2(1, 1),YELLOW)
     info = helper.Text(VERSION,font6,Vector2(1, 1), YELLOW)
     listformat = options.OptionsFormat(font16, Vector2(1, 1),WHITE, GREEN, 84)
 
-    data={}
+    data=settings.get()
     node =  options.OptionsNode(title, help, info, listformat, BLACK, data)
     node.load("wallracer.options")
     
     node.show()
     
-    game_mode = data["mode"]
-    speed = data["speed"]
-    showfps = data["showfps"]
+    settings.set(data)
+    settings.save()
 
-    saveSettings()
 
     node.mark_destroy()
 
@@ -840,14 +861,13 @@ while page != PAGE_QUIT:
     if page == PAGE_TITLE:
         page = displayTitle()
     if page == PAGE_GAME:
-        if game_mode == MODE_LINK:
+        if settings.link:
             won, points = playMultiplayerGame()
             displayPoints(points, won)
         else:
             points = playSingleplayerGame()
             displayPoints(points)
-        if (game_mode == MODE_FULL) or (game_mode == MODE_PURE):
-            score.check(modeID(), points)
+            score.check(settings.highscore_id(), points)
         page = PAGE_TITLE
     if page == PAGE_OPTIONS:
         displayOptions()
