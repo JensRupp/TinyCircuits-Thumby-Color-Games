@@ -280,18 +280,18 @@ class MultiplayerNode(EmptyNode):
         return v.pos
     
        
-    #@micropython.viper    
+    @micropython.viper    
     def write_byte(self, pos = int ,value = int):
         self.buffer[pos] = int(value) & 0b11111111
         
-    #@micropython.viper    
+    @micropython.viper    
     def write_word(self, pos = int,value = int):
         p = int(pos)
         v = int(value)
         self.buffer[pos] = v & 0b11111111
         self.buffer[p+1] = (v >> 8) & 0b11111111
     
-    #@micropython.viper            
+    @micropython.viper            
     def write(self, name, value):
         v = self.values[name]
         if v.type == VALUE_BYTE:
@@ -299,7 +299,7 @@ class MultiplayerNode(EmptyNode):
         elif v.type == VALUE_WORD:
             self.write_word(v.pos, value)
 
-    #@micropython.viper            
+    @micropython.viper            
     def writei(self, name, value, index):
         v = self.values[name]
         pos = v.pos + VALUE_SIZE[v.type] * index
@@ -309,11 +309,11 @@ class MultiplayerNode(EmptyNode):
             self.write_word(pos, value)
 
                                     
-    #@micropython.viper
+    @micropython.viper
     def read_byte(self, pos = int) -> int:
         return int(self.buffer[pos])
     
-    #@micropython.viper
+    @micropython.viper
     def read_word(self, pos = int) -> int:
         p = int(pos)
         v = int(self.buffer[p])
@@ -321,7 +321,7 @@ class MultiplayerNode(EmptyNode):
         v = int(v + (x << 8 ))
         return v
     
-    #@micropython.viper            
+    @micropython.viper            
     def read(self,name):
         v = self.values[name]
         pos = v.pos 
@@ -330,7 +330,7 @@ class MultiplayerNode(EmptyNode):
         elif v.type == VALUE_WORD:
             return self.read_word(pos)
         
-    #@micropython.viper            
+    @micropython.viper            
     def readi(self,name,index):
         v = self.values[name]
         pos = v.pos + VALUE_SIZE[v.type] * index
