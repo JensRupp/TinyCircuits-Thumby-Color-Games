@@ -25,10 +25,8 @@ GAME_NAME = "WallRacer"
 VERSION = "V1.5"
 SCREEN_WIDTH = 128
 SCREEN_HEIGHT = 128
-VIRTUAL_WIDTH = SCREEN_WIDTH * 2 
-VIRTUAL_HEIGHT = SCREEN_HEIGHT * 2 
-BYTES_PER_PIXEL = 2
-BYTE_SIZE = VIRTUAL_WIDTH * VIRTUAL_HEIGHT * BYTES_PER_PIXEL
+VIRTUAL_WIDTH = [int(SCREEN_WIDTH), int(SCREEN_WIDTH * 1.5), int(SCREEN_WIDTH * 2)] 
+VIRTUAL_HEIGHT = [int(SCREEN_HEIGHT), int(SCREEN_HEIGHT * 1.5), int(SCREEN_HEIGHT * 2) ]
 BONUS_FACTOR = 20  # points for collecting a bonus dot multiplied by speed
 BONUS_DISTANCE = 20  # minimum distance between dots
 BONUS_COUNT = 3  # number of bonus dots displayed
@@ -38,19 +36,15 @@ EXPLOSION_BITS = 72  # number of pixels in the explosion
 EXPLOSION_STEPS = 20  # number of steps the explosion runs
 EXPLOSION_RUMBLE = 0.4 # rumble intensity during explosion
 POINTS_WON = 1000  # extra points for winning
-BOOST_COOLDOWN = 80  # number of pixels to wait for next boost
+#BOOST_COOLDOWN = 80  # number of pixels to wait for next boost
+BOOST_COOLDOWN = 20
 BOOST_TIME = 40  # number of pixels to boost
-BOOST_SPEED = 3  # increase of speed during boost
+BOOST_SPEED = 4  # increase of speed during boost
 BOOST_RUMBLE = 0.2  # rumble intensity during boost
 # map direction to offsets
 PLAYERXADD = [1, 0, -1, 0]  # mapping of direction to x add
 PLAYERYADD = [0, 1, 0, -1]  # mapping of direction to y add
-START_POSITIONS = [
-    [30, 30, 0],
-    [30, VIRTUAL_HEIGHT - 30, 0],
-    [VIRTUAL_WIDTH - 30, 30, 2],
-    [VIRTUAL_WIDTH - 30, VIRTUAL_HEIGHT - 30, 2],
-]
+START_BORDER_DISTANCE = 30
 FPSAVERAGECOUNT = 10
 
 # pages
@@ -61,6 +55,7 @@ PAGE_OPTIONS = 3
 PAGE_WAITFORPLAYER = 4
 PAGE_HIGHSCORE = 5
 PAGE_ENTERHIGHSCORE = 6
+PAGE_TEST = 7
 
 # map engine colors to framebuffer
 BLACK = engine_draw.black.value
@@ -79,11 +74,36 @@ GREENYELLOW = engine_draw.greenyellow.value
 BACKGROUND = BLACK
 FRAME1 = WHITE
 FRAME2 = RED
-PLAYER_COLOR=[GREEN, BLUE]
+#PLAYER_COLOR=[GREEN, BLUE, RED, YELLOW, PINK, GREY]
+
+#LIGHT MEDIUM DARK
+#GREEN, BLUE, RED, ORANGE, VIOLET, TURQUOISE
+PLAYER_COLOR=[[0xbff7, 0x8c7f, 0xfcd3, 0xfead, 0xfa9f, 0x1ffc], [0x07e0, 0x001F, 0xF800,  0xFDA0, 0xb817, 0x05b4], [0x0540, 0x18f2, 0xa800, 0xbc40, 0x9813, 0x034c]]
+
 EXPLOSION = RED
 ANIMATION = [YELLOW, RED]
 
-
+def lighter(color):
+    r = color >> 11
+    r += 5
+    if r > 31:
+        r = 31
+    
+    g = (color >> 5) & 0b00111111
+    g  += 10
+    if g > 63:
+        g = 63
+    
+    b = color & 0b00011111
+    b += 5
+    if b > 31:
+        b = 31
+        
+    c = (r << 11) + (g << 5) + b
+    return c
+    
+    
+    
 log = logger.log("/Games/WallRacerC/wallracer.log")
 #log.start()
 log.info("Start")
@@ -103,10 +123,6 @@ def print_memory_usage():
 random.seed(time.ticks_ms())
 
 camera = CameraNode()
-
-# Virtual Screen and graphics
-texture = TextureResource(VIRTUAL_WIDTH, VIRTUAL_HEIGHT,0,16)
-virtual_screen = framebuf.FrameBuffer(texture.data, texture.width, texture.height, framebuf.RGB565)
 
 # init fonts
 os.chdir("/Games/WallRacerC")
@@ -197,13 +213,13 @@ def addBonus(multi):
     ok = False
     while not ok:
         ok = True
-        x = random.randint(BONUS_BORDER_DISTANCE, VIRTUAL_WIDTH - BONUS_BORDER_DISTANCE)
-        y = random.randint(BONUS_BORDER_DISTANCE, VIRTUAL_HEIGHT - BONUS_BORDER_DISTANCE)
+        x = random.randint(BONUS_BORDER_DISTANCE, multi.state.width - BONUS_BORDER_DISTANCE)
+        y = random.randint(BONUS_BORDER_DISTANCE, multi.state.height - BONUS_BORDER_DISTANCE)
 
         # check distance to players
-        for player in range(0,multi.player_count):
-            player_x = multi.readi("x", player)
-            player_y = multi.readi("y", player)
+        for player in range(0,multi.count):
+            player_x = multi.read_player("x", player)
+            player_y = multi.read_player("y", player)
             if (
                 (x >= player_x - BONUS_DISTANCE)
                 and (x <= player_x + BONUS_DISTANCE)
@@ -268,20 +284,20 @@ def checkBonus(x, y, state):
     return hit
 
 # draw a frame with alternating colors
-def drawFrame(screen):
-    screen.rect(0, 0, VIRTUAL_WIDTH , VIRTUAL_HEIGHT , FRAME1)
+def drawFrame(screen, width: int, height: int):
+    screen.rect(0, 0, width , height , FRAME1)
 
     lw = int(SCREEN_WIDTH / 4)
-    c = int((VIRTUAL_WIDTH / (lw * 2)) )
+    c = int((width / (lw * 2)) )
     for step in range(c):
         screen.hline(lw + step * lw * 2, 0, lw, FRAME2)
-        screen.hline(lw + step * lw * 2, VIRTUAL_HEIGHT - 1, lw, FRAME2)
+        screen.hline(lw + step * lw * 2, height - 1, lw, FRAME2)
 
     w = int(SCREEN_HEIGHT / 4)
-    c = int((VIRTUAL_HEIGHT / (lw * 2)) )
+    c = int((height / (lw * 2)) )
     for step in range(c):
         screen.vline(0, lw + step * lw * 2, lw, FRAME2)
-        screen.vline(VIRTUAL_WIDTH - 1, lw + step * lw * 2, lw, FRAME2)
+        screen.vline(width - 1, lw + step * lw * 2, lw, FRAME2)
 
 #display the bonus
 def displayBonus(points, state):
@@ -304,14 +320,15 @@ def displayBonus(points, state):
         scale=Vector2(2, 2),
         layer = 100
     )
-    #display for one second
-    state.sleep =  engine.fps_limit()
+    #display for a short time
+    state.sleep =  engine.fps_limit() // 2
 
 
 class GameState():
     def __init__(self, screen):
-        self.points = 0
-        self.won = True
+        self.width = 0
+        self.height = 0
+        self.won = -1
         self.screen = screen
         self.arena = None
         self.speed = 0 #set from settings
@@ -322,20 +339,183 @@ class GameState():
         self.hasbonus = False
         self.bonus = []
         
-        self.throttle = 0
-        
         # for bonus point display
         self.sleep = 0
         self.bonus1 = None
         self.bonus2 = None
+        
+        #for identify
+        self.idplayer = [None, None, None]
 
+        #for boost
         self.hasboost = False
         self.boost = 0
         
-
-        
-def handlePlayer(multi,index):
+        #for player control
+        self.control = []
     
+        
+def control1():
+    bl = engine_io.LB.is_just_pressed
+    br = engine_io.RB.is_just_pressed
+    bb = engine_io.B.is_just_pressed
+    return bl,br,bb
+
+def control2():
+    bl = engine_io.UP.is_just_pressed
+    br = engine_io.DOWN.is_just_pressed
+    bb = engine_io.LB.is_just_pressed
+    return bl,br,bb
+
+def control3():
+    bl = engine_io.B.is_just_pressed
+    br = engine_io.A.is_just_pressed
+    bb = engine_io.RB.is_just_pressed
+    return bl,br,bb
+
+def control4():
+    bl = engine_io.UP.is_just_pressed
+    br = engine_io.DOWN.is_just_pressed
+    bb = False
+    return bl,br,bb
+
+def control5():
+    bl = engine_io.B.is_just_pressed
+    br = engine_io.A.is_just_pressed
+    bb = False
+    return bl,br,bb
+
+def control6():
+    bl = engine_io.RB.is_just_pressed
+    br = engine_io.LB.is_just_pressed
+    bb = False
+    return bl,br,bb
+
+def cbidentifyplayers(multi, create):
+    if create:
+        if multi.is_host():
+            playeradd = 0
+        else:
+            playeradd = multi.local_count
+        for player in range(0, multi.local_count):
+            if multi.local_count == 1:
+                rotation = 0
+                if multi.state.hasboost:
+                    buttons="LB/RB/B"
+                else:  
+                    buttons="LB/RB"
+            elif player == 0:
+                rotation = - math.pi / 2
+                if multi.state.hasboost:
+                    buttons="U/D/LB"
+                else: 
+                    buttons="U/D"
+            elif player == 1:
+                rotation = math.pi / 2
+                if multi.state.hasboost:
+                    buttons="B/A/RB"
+                else:  
+                    buttons="B/A"
+            elif player == 2:
+                rotation = - math.pi
+                buttons="RB/LB"
+        
+            multi.state.idplayer[player] = Text2DNode(
+                                position=Vector2(0, 0),
+                                text="Player "+str(player+1+playeradd)+" "+buttons,
+                                font=font6,
+                                line_spacing=1,
+                                color=PLAYER_COLOR[1][player+playeradd],
+                                scale=Vector2(1, 1),
+                                rotation= rotation
+                                )
+            multi.add_child(multi.state.idplayer[player])
+            
+            
+            if multi.local_count == 1:
+                helper.align_top(multi.state.idplayer[player])
+            elif player == 0:
+                helper.align_left(multi.state.idplayer[player], - 32)
+            elif player == 1:
+                helper.align_right(multi.state.idplayer[player], - 32)
+            elif player == 2: 
+                helper.align_top(multi.state.idplayer[player])
+            
+
+    else:
+        for player in range(0, multi.local_count):
+            multi.state.idplayer[player].mark_destroy()
+        
+
+
+# initialize the synced data on the host
+def cbinitgame(multi):
+    multi.write("speed", multi.state.speed)
+    
+    for player in range (0, multi.count):
+        if multi.count == 1:
+            startpos = random.randint(0, 3)
+        elif multi.count  == 2:
+            startpos = random.randint(player*2, player*2+1)
+        else:
+            startpos = player
+       
+        if startpos == 0:
+            # topleft
+            x = START_BORDER_DISTANCE
+            y = START_BORDER_DISTANCE
+            d = 0
+        elif startpos == 1:
+            # bottomleft
+            x = START_BORDER_DISTANCE
+            y = multi.state.height - START_BORDER_DISTANCE
+            d = 0
+        elif startpos == 2:
+            #topright
+            x = multi.state.width - START_BORDER_DISTANCE
+            y = START_BORDER_DISTANCE
+            d = 2
+        elif startpos == 3:
+            #bottomright
+            x = multi.state.width - START_BORDER_DISTANCE
+            y = multi.state.height - START_BORDER_DISTANCE
+            d = 2
+        elif startpos == 4:
+            #bottomright
+            x = 64 #multi.state.width // 2
+            y = START_BORDER_DISTANCE
+            d = 1
+        elif startpos == 5:
+            #bottomright
+            x = 64 #multi.state.width // 2
+            y = multi.state.height - START_BORDER_DISTANCE
+            d = 3
+
+        multi.write_player("x", x, player)
+        multi.write_player("y", y, player)
+        multi.write_player("d", d, player)
+        
+    if multi.state.hasbonus:       
+        initBonus(multi)
+    
+
+
+def cbinitplayer(multi, player):
+    #set speed to lowest of all players
+    hostspeed = multi.read("speed")
+    
+    if multi.state.speed < hostspeed:
+        hostspeed = multi.state.speed
+        multi.write("speed",hostspeed)
+    throttle = 11 - hostspeed
+    
+    multi.write_player("t", throttle, player)
+    multi.write_player("c", 0, player)
+    multi.write_player("b", 0, player)
+    multi.write_player("p", 0, player)
+    
+       
+def cbplayer(multi, player):
     if multi.state.sleep > 0:
         multi.state.sleep -= 1
         
@@ -344,60 +524,63 @@ def handlePlayer(multi,index):
             multi.state.bonus1.mark_destroy()
             multi.state.bonus2.mark_destroy()
     else:
-        x = multi.readi("x",index)
-        y = multi.readi("y",index)
-        direction = multi.readi("d",index)
-        
-        crash1 = multi.readi("c",0)
-        if multi.player_count == 2:
-            crash2 = multi.readi("c",1)
-        else:
-            crash2 = 0
+        x = multi.read_player("x", player)
+        y = multi.read_player("y", player)
+        direction = multi.read_player("d", player)
+        throttle = multi.read_player("t", player)
+        crash = multi.read_player("c", player)
+        boost = multi.read_player("b", player) - BOOST_COOLDOWN
+        points = multi.read_player("p", player)
          
-        # if no player has crashed move
-        if (crash1 == 0) and (crash2 == 0):
-            if engine_io.LB.is_just_pressed:
+        # only move if not crashed
+        if (crash == 0):
+            lb,rb,bb = multi.state.control[player]()
+            if lb:
                 direction = (direction - 1) % 4
-                multi.writei("d", direction,index)
+                multi.write_player("d", direction, player)
 
-            # Turn right on RB
-            if engine_io.RB.is_just_pressed:
+            if rb:
                 direction = (direction + 1) % 4
-                multi.writei("d", direction,index)
+                multi.write_player("d", direction, player)
                 
-            # Start boost on B
-            if multi.state.hasboost and (multi.state.boost == 0) and engine_io.B.is_just_pressed:
-                multi.state.boost = BOOST_TIME
-                multi.state.throttle -= BOOST_SPEED
+            if multi.state.hasboost and (boost == 0) and bb:
+                boost = BOOST_TIME
+                throttle -= BOOST_SPEED
                 #limit throttle to max speed
-                if multi.state.throttle < 1:
-                    multi.state.throttle = 1
-                engine_io.indicator(engine_draw.red)    
+                if throttle < 1:
+                    throttle = 1
+                multi.write_player("t", throttle, player)
+                multi.write_player("b", boost + BOOST_COOLDOWN , player)
                 
-                
-            
-            if multi.counter % multi.state.throttle == 0:
-                
+                if multi.local_count == 1:
+                    engine_io.indicator(engine_draw.red)    
+                               
+            if multi.counter % throttle == 0:
                 if multi.state.hasboost:
-                    if multi.state.boost < 0:
-                        multi.state.boost += 1
-                        if multi.state.boost == 0:
-                            engine_io.indicator(engine_draw.green)
-                    elif multi.state.boost >  0:
-                        multi.state.boost -= 1
-                        if multi.state.boost == 0:
+                    if boost < 0:
+                        boost += 1
+                        if boost == 0:
+                            if multi.local_count == 1:
+                                engine_io.indicator(engine_draw.green)
+                        multi.write_player("b", boost + BOOST_COOLDOWN , player)
+                    elif boost >  0:
+                        boost -= 1
+                        if boost == 0:
                             speed = multi.read("speed")
                             throttle = 11 - speed
                             boost = -BOOST_COOLDOWN
-                            engine_io.indicator(engine_draw.blue)
+                            multi.write_player("t", throttle, player)
+                            if multi.local_count == 1:
+                                engine_io.indicator(engine_draw.blue)
+                        multi.write_player("b", boost + BOOST_COOLDOWN , player)        
                 
                 
                 x += PLAYERXADD[direction]
                 y += PLAYERYADD[direction]
-                multi.writei("x", x,index)
-                multi.writei("y", y,index)
+                multi.write_player("x", x, player)
+                multi.write_player("y", y, player)
                 
-                multi.state.points += 1
+                points += 1
 
                 if multi.state.hasbonus: 
                     hit = checkBonus(x, y, multi.state)
@@ -407,59 +590,55 @@ def handlePlayer(multi,index):
                         addBonus(multi)
                         speed = multi.read("speed")
                         bonus_points = speed * BONUS_FACTOR
-                        multi.state.points += bonus_points
+                        points += points
                         displayBonus(bonus_points, multi.state)
 
-
                 if multi.state.screen.pixel(x, y) != BACKGROUND:
-                    multi.writei("c", 1,index)
-                    multi.state.won = False
+                    multi.write_player("c", 1, player)
 
-# speed calculation:
-# host writes speed on init to "speed"
-# client checks if hios values is smaller, if yes write to "speed"
-# client uses the sameller value to init throttle
-# host reads trhe possibly upüdates "speed" and uses that to init throttle
-def cbclient(multi):
-    #init speed on minimum of host and client
-    if multi.state.throttle == 0:
-        hostspeed = multi.read("speed")
-        if multi.state.speed < hostspeed:
-            hostspeed = multi.state.speed
-            multi.write("speed",hostspeed)
-        multi.state.throttle = 11 - hostspeed
-    
-    handlePlayer(multi, 1)
+                multi.write_player("p", points, player)
 
-def cbhost(multi):
-    #init speed on minimum of host and client
-    if multi.state.throttle == 0:
-        hostspeed = multi.read("speed")
-        multi.state.throttle = 11 - hostspeed
-
-    handlePlayer(multi, 0)
-
+#not used
 def cbwork(multi):
+    pass
+
+
+def cbdisplay(multi):
     if multi.is_host():
         this = 0
     else:
         this = 1
 
     #draw player
-    for player in range(0,multi.player_count):
-        x = multi.readi("x", player)
-        y = multi.readi("y", player)
-        c = multi.readi("c", player)
+    for player in range(0, multi.count):
+        x = multi.read_player("x", player)
+        y = multi.read_player("y", player)
+        c = multi.read_player("c", player)
+        
         if c == 0:
-            multi.state.screen.pixel(x, y, PLAYER_COLOR[player])
+            if multi.state.hasboost:
+                b = multi.read_player("b", player) - BOOST_COOLDOWN
+                if b < 0:
+                    color = 2
+                elif b > 0:
+                    color = 0
+                else:
+                    color = 1
+                #print("P "+str(player)+" B" +str(b)+" C "+str(color)) 
+            else:
+                color = 1
+            
+                
+            multi.state.screen.pixel(x, y, PLAYER_COLOR[color][player])
         elif c == 1:
             addexplosion(x,y, multi.state)
-            multi.writei("c",2,player)
-        #center on this player            
-        if player == this:
-            screenx = SCREEN_WIDTH - x
-            screeny = SCREEN_HEIGHT - y
-            multi.state.arena.position = Vector2(screenx, screeny)
+            multi.write_player("c", 2, player)
+        #center on this player
+        if multi.state.width > SCREEN_WIDTH:
+            if player == this:
+                screenx = SCREEN_WIDTH - x
+                screeny = SCREEN_HEIGHT - y
+                multi.state.arena.position = Vector2(screenx, screeny)
 
     if multi.state.hasbonus:
         drawBonusList(multi.counter, multi.state)
@@ -469,43 +648,38 @@ def cbwork(multi):
         moveexplosion(multi.state)
         multi.state.explosion -= 1
 
-        #when explosion finshed stop ther game
         if multi.state.explosion == 0:
             engine_io.rumble(0)
-            time.sleep(0.5)        
-            multi.cancel()
+            clearexplosion(multi.state)
+            
+            #count active players
+            if multi.count > 1:
+                active = 0
+                for player in range(0, multi.count):
+                    if multi.read_player("c", player) == 0:
+                        multi.state.won = player
+                        active+=1
+                #for multiplayer game stop when 1 player is left        
+                if active < 2:        
+                    time.sleep(0.5)        
+                    multi.docancel()
+            else:
+                #for singleplayer always stop after explosion
+                multi.state.won = 0
+                time.sleep(0.5)        
+                multi.docancel()
+                
 
-# initialize the synced data on the host
-def cbinit(multi):
-    
-    multi.write("speed", multi.state.speed)
-
-    for player in range (0,multi.player_count):
-        if multi.player_count == 1:
-            startpos = random.randint(0, 3)
-        else:
-            startpos = random.randint(player*2, player*2+1)
-       
-        start = START_POSITIONS[startpos]
-        multi.writei("x", start[0], player)
-        multi.writei("y", start[1], player)
-        multi.writei("d", start[2], player)
-        multi.writei("c", 0, player)
-        
-    if multi.state.hasbonus:       
-        initBonus(multi)
-
-
-
-def initScreen():
-    global virtual_screen
+def initScreen(width: int, height: int):
+    texture = TextureResource(int(width), int(height),0,16)
+    virtual_screen = framebuf.FrameBuffer(texture.data, texture.width, texture.height, framebuf.RGB565)
     
     # Clear virtual screen
     virtual_screen.fill(BACKGROUND)
     # Add the frame
-    drawFrame(virtual_screen)
+    drawFrame(virtual_screen, width, height)
     arena = Sprite2DNode(texture=texture)
-    return arena
+    return virtual_screen, arena
     
 def finishScreen(arena):    
     arena.mark_destroy()
@@ -544,113 +718,103 @@ def updateFPS(fpsnode):
             #helper.align_left(fpsnode)
             fpssum = 0
             fpscount = FPSAVERAGECOUNT
-    
 
-    
-def playSingleplayerGame():
+def playGame():
     global settings
-    global virtual_screen
     
     engine.fps_limit(120)
 
-    multi = multiplayer.MultiplayerNode()
-    multi.state = GameState(virtual_screen)
-    multi.state.speed = settings.speed
-    
-    # Bonus dots only for full game
-    if settings.bonus == 1:
-        multi.state.hasbonus = True
-    
+    if settings.link:
+        devicecount = 2
+        localcount = settings.player2t
+    else:
+        devicecount = 1
+        localcount = settings.player1t
 
-    multi.register("speed", multiplayer.VALUE_BYTE)
-    multi.register("x", multiplayer.VALUE_WORD)
-    multi.register("y", multiplayer.VALUE_WORD)
-    multi.register("d", multiplayer.VALUE_BYTE)
-    multi.register("c", multiplayer.VALUE_BYTE)
-    
-
-    multi.cb_init = cbinit
-    
-    if multi.start(False):
-        log.info("start ok")
-        multi.state.arena = initScreen()
-        multi.cb_host = cbhost
-        multi.cb_work = cbwork
-
-        fpsnode = addFPS()
-
-        while multi.running():
-            if engine.tick():
-                updateFPS(fpsnode)
-
-        multi.cb_host = None
-        multi.cb_work = None
-
-        finishScreen(multi.state.arena)
-        points = multi.state.points
-        if settings.showfps:
-            fpsnode.mark_destroy()
-
-
-    multi.mark_destroy()
-    engine_io.rumble(0)
-        
-    return points
-            
-
-
-def playMultiplayerGame():
-    global settings
-    global virtual_screen
-    
-    engine.fps_limit(120)
-    
-    multi = multiplayer.MultiplayerNode()
-    multi.state = GameState(virtual_screen)
-    multi.state.speed = settings.speed
-    
-    if settings.boost == 1:
-        multi.state.hasboost = True
-        multi.state.boost = 0 # start witrh 0 collected dots
-    elif settings.boost == 2:
-        multi.state.hasboost = True
-        multi.state.boost = -BOOST_COOLDOWN  # start with charging
-        engine_io.indicator(engine_draw.blue)
-    else:    
-        multi.state.hasboost = False
-    
-    multi.countdown = 2
-    
-    bits = []
-
+    multi = multiplayer.MultiplayerNode(devicecount, localcount)
+    multi.log = log
     multi.text_connecting = helper.Text("Connecting", font16,Vector2(1, 1), WHITE  )
     multi.text_cancel = helper.Text("M to cancel", font6,Vector2(1, 1), WHITE  )
-    multi.text_start = helper.Text("    Press\n       A\nwhen ready", font16,Vector2(1, 1), WHITE  )
+    multi.text_start = helper.Text(" Press\n    A\nto start", font16,Vector2(1, 1), WHITE  )
     multi.text_countdown = helper.Text("Ready",font16,Vector2(2, 2), WHITE )
+    multi.countdown = 2
     
-    # d = direction
-    # c = crash
+    #init state
+    multi.state = GameState(None)
+    multi.state.speed = settings.speed
+        
+    # only for 1 player on a thumby allow  bigger screen
+    if localcount == 1:
+        size = settings.arena
+    else:
+        size = 1
+    multi.state.width = VIRTUAL_WIDTH[size-1]
+    multi.state.height = VIRTUAL_HEIGHT[size-1]
+   
+    #init controls    
+    if multi.local_count == 1:
+        multi.state.control.append(control1)
+        multi.state.control.append(control1)
+    elif multi.local_count == 2:    
+        multi.state.control.append(control2)
+        multi.state.control.append(control3)
+        multi.state.control.append(control2)
+        multi.state.control.append(control3)
+    elif multi.local_count == 3:    
+        multi.state.control.append(control4)
+        multi.state.control.append(control5)
+        multi.state.control.append(control6)
+        multi.state.control.append(control4)
+        multi.state.control.append(control5)
+        multi.state.control.append(control6)
+
+    #set boost
+    if (multi.count > 1) and (multi.count<5):
+        if settings.boost == 2:
+            multi.state.hasboost = True
+            multi.state.boost = 0 # start with 0 collected dots
+        elif settings.boost == 1:
+            multi.state.hasboost = True
+            multi.state.boost = -BOOST_COOLDOWN  # start with charging
+            engine_io.indicator(engine_draw.blue)
+        else:    
+            multi.state.hasboost = False
+    else:
+        multi.state.hasboost = False
+        
+    #set bonus
+    if multi.device_count == 1:
+        multi.state.hasbonus = settings.bonus == 1
+            
+
     multi.register("speed", multiplayer.VALUE_BYTE)
-    multi.register("x", multiplayer.VALUE_WORD,2)
-    multi.register("y", multiplayer.VALUE_WORD,2)
-    multi.register("d", multiplayer.VALUE_BYTE,2)
-    multi.register("c", multiplayer.VALUE_BYTE,2)    
+    multi.register("x", multiplayer.VALUE_WORD, True)
+    multi.register("y", multiplayer.VALUE_WORD, True)
+    multi.register("d", multiplayer.VALUE_BYTE, True)
+    multi.register("t", multiplayer.VALUE_BYTE, True)
+    multi.register("c", multiplayer.VALUE_BYTE, True)    
+    multi.register("b", multiplayer.VALUE_BYTE, True)    
+    multi.register("p", multiplayer.VALUE_WORD, True)    
 
-
-    multi.cb_init = cbinit
-
-    log.info("before start")
+    multi.cb_init_game = cbinitgame
+    multi.cb_init_player = cbinitplayer
+    multi.cb_identify_players = cbidentifyplayers
     
+    log.info("before start "+multi.debug())
     if multi.start():
-        log.info("start ok")
-        multi.state.arena = initScreen()
-        multi.cb_client = cbclient
-        multi.cb_host = cbhost
-        multi.cb_work = cbwork
+        log.info("after start "+multi.debug())
+        multi.cb_player = cbplayer
+        #multi.cb_work = cbwork
+        multi.cb_display = cbdisplay
         
         fpsnode = addFPS()
         
-        log.info("loop")
+        virtual_screen, arena = initScreen(VIRTUAL_WIDTH[size-1], VIRTUAL_HEIGHT[size-1])
+        multi.state.arena = arena
+        multi.state.screen = virtual_screen
+        
+        
+        log.info("loop "+multi.debug())
         while multi.running():
             if engine.tick():
                 updateFPS(fpsnode)
@@ -659,16 +823,19 @@ def playMultiplayerGame():
         multi.cb_work = None
 
         finishScreen(multi.state.arena)
-        points = multi.state.points
-        if multi.state.won:
-            points += POINTS_WON 
         won = multi.state.won
+        if won >= 0:
+            points = multi.read_player("p", won)
+        else:
+            points = 0 #multi.read_player("p", 0)
+        #if multi.state.won:
+        #    points += POINTS_WON 
             
         if settings.showfps:
             fpsnode.mark_destroy()
     else:
         points = 0
-        won = False;
+        won = -1;
 
     #remove any messages that might be left
     engine_link.clear_send()
@@ -679,6 +846,7 @@ def playMultiplayerGame():
     engine_io.rumble(0)
 
     return won, points
+
 
 def displayTitle():
     engine.fps_limit(60)
@@ -743,28 +911,36 @@ def displayTitle():
                 if settings.highscore_id() != "":
                     page = PAGE_HIGHSCORE
                     break
+            if engine_io.DOWN.is_just_pressed:
+                    page = PAGE_TEST
+                    break
     logo_node.mark_destroy()
     text1.mark_destroy()
     text2.mark_destroy()
     return page
 
 
-def displayPoints(points, won = True):
+def displayPoints(points, won = -1):
     global settings
 
-    if settings.link:
-        if won:
-            text = "Victory!"
-        else:
-            text = "Lost!"
+    #if settings.link:
+    #    if won:
+    #        text = "Victory!"
+    #    else:
+    #        text = "Lost!"
+    #else:
+    #    text = "Crash!"
+    text = "Player "+str(won+1)
+    if won >= 0:
+        c = PLAYER_COLOR[1][won]
     else:
-        text = "Crash!"
+        c = WHITE
 
     crash = Text2DNode(
         position=Vector2(0, -30),
         text=text,
         font=font16,
-        color=WHITE,
+        color=c,
         scale=Vector2(2, 2),
     )
 
@@ -794,6 +970,24 @@ def displayPoints(points, won = True):
     pointst.mark_destroy()
     points.mark_destroy()
 
+
+def test():
+    nodes = []
+    for x in range(0,3):
+        for y in range(0,6):
+            c = PLAYER_COLOR[x][y]
+            position = Vector2(x*21-64+10,y*21-64+10)
+            node = Rectangle2DNode(position,20,20, c)
+            nodes.append(node)
+    
+    while True:
+        if engine.tick():
+            if engine_io.A.is_just_pressed:
+                break
+    for node in nodes:
+        node.mark_destroy()
+            
+    
 
 def displayHighscore():
     score.show(settings.highscore_id())
@@ -825,12 +1019,31 @@ def addexplosion(x, y, state):
         bit = [
             x,
             y,
-            (random.randint(0, 20) - 10) / 10,
-            (random.randint(0, 20) - 10) / 10,
+            (random.randint(0, 20) - 10) / 20,
+            (random.randint(0, 20) - 10) / 20,
         ]
         state.bits.append(bit)
+    fixexplosion(state)            
     engine_io.rumble(EXPLOSION_RUMBLE)
-    state.explosion = EXPLOSION_STEPS    
+    state.explosion = EXPLOSION_STEPS * 2   
+
+def clearexplosion(state):
+    for bit in state.bits:
+        state.screen.pixel(int(bit[0]), int(bit[1]), BACKGROUND)
+    state.bits = []    
+
+def fixexplosion(state):
+    for bit in state.bits:
+        if bit[0] < 1:
+            bit[0] = 1
+        if bit[0] >= state.width - 1:
+            bit[0] = state.width - 2
+
+        if bit[1] < 1:
+            bit[1] = 1
+        if bit[1] >= state.height - 1:
+            bit[1] = state.height - 2
+
 
 def moveexplosion(state):
     # remove from current position
@@ -840,16 +1053,8 @@ def moveexplosion(state):
     # move bits to new position
     for bit in state.bits:
         bit[0] = bit[0] + bit[2]
-        if bit[0] < 0:
-            bit[0] = 0
-        if bit[0] >= VIRTUAL_WIDTH:
-            bit[0] = VIRTUAL_WIDTH - 1
-
         bit[1] = bit[1] + bit[3]
-        if bit[1] < 0:
-            bit[1] = 0
-        if bit[1] >= VIRTUAL_HEIGHT:
-            bit[1] = VIRTUAL_HEIGHT - 1
+    fixexplosion(state)    
 
     # draw at new position
     for bit in state.bits:
@@ -861,12 +1066,10 @@ while page != PAGE_QUIT:
     if page == PAGE_TITLE:
         page = displayTitle()
     if page == PAGE_GAME:
-        if settings.link:
-            won, points = playMultiplayerGame()
-            displayPoints(points, won)
-        else:
-            points = playSingleplayerGame()
-            displayPoints(points)
+        won, points = playGame()
+        if won >=0:
+          displayPoints(points, won)
+        if settings.highscore_id() != "":
             score.check(settings.highscore_id(), points)
         page = PAGE_TITLE
     if page == PAGE_OPTIONS:
@@ -880,6 +1083,10 @@ while page != PAGE_QUIT:
     if page == PAGE_ENTERHIGHSCORE:
         enterHighscore(points)
         page = PAGE_HIGHSCORE
+    if page == PAGE_TEST:
+        test()
+        page = PAGE_TITLE
+
 
 engine.tick()
 
