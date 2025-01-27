@@ -33,7 +33,7 @@
       "id": "player2t",
       "text": "Player",
       "help": "Number of players on two connected thumbies",
-      "values": [ ["1V1P", 1], ["2v2P", 2], ["3v3P", 3] ],
+      "values": [ ["1V1", 1], ["2v2", 2], ["3v3", 3] ],
       "default": 1,
       "refresh": true,
       "conditions": [
@@ -44,7 +44,7 @@
       "id": "player1t",
       "text": "Player",
       "help": "Number of players on one thumby.",
-      "values": [ ["1P", 1], ["2P", 2], ["3P", 3] ],
+      "values": [ ["1", 1], ["2", 2], ["3", 3] ],
       "default": 1,
       "refresh": true,
       "conditions": [
@@ -79,11 +79,13 @@
       "id": "boost",
       "text": "Boost",
       "help": "",
-      "values": [ ["Dots", 1], ["Time", 2], ["Off", 3] ],
+      "values": [ ["Time", 1], ["Off", 3] ],
       "default": 1,
       "refresh": false,
       "conditions": [
-        [ ["link", true] ]
+        [ ["link", true] ],
+        [["link", false], ["player1t",2]],
+        [["link", false], ["player1t",3]],
       ]
     },
     {
