@@ -352,6 +352,7 @@ class MultiplayerNode(EmptyNode):
         self.datapos += VALUE_SIZE[type] * count
         self.size += VALUE_SIZE[type] * count
         self.buffer = bytearray(self.size)
+        return v.pos
        
     @micropython.viper    
     def write_byte(self, pos: int ,value: int):
@@ -387,24 +388,28 @@ class MultiplayerNode(EmptyNode):
        
     
     @micropython.viper            
-    def write(self, name, value):
+    def write(self, name, value: int):
         v = self.values[name]
+        b = int(ptr8(self.buffer)) + int(v.pos)
         if v.type == VALUE_BYTE:
-            self.write_byte(v.pos, value)
+            ptr8(b)[0] = value
         elif v.type == VALUE_WORD:
+            ptr16(b)[0] = value
             self.write_word(v.pos, value)
         elif v.type == VALUE_DWORD:
-            self.write_dword(v.pos, value)
+            ptr32(b)[0] = value
+
             
     @micropython.viper            
-    def write_player(self, name, value, player):
+    def write_player(self, name, value: int, player: int):
         v = self.values[name]
+        b = int(ptr8(self.buffer)) + int(v.pos)
         if v.type == VALUE_BYTE:
-            self.write_byte_player(v.pos, value, player)
+            ptr8(b)[player] = value
         elif v.type == VALUE_WORD:
-            self.write_word_player(v.pos, value, player)            
+            ptr16(b)[player] = value
         elif v.type == VALUE_DWORD:
-            self.write_dword_player(v.pos, value,player)            
+            ptr32(b)[player] = value
 
     @micropython.viper
     def read_byte(self, pos: int) -> int:
@@ -437,27 +442,27 @@ class MultiplayerNode(EmptyNode):
         buf = ptr32(int(ptr8(self.buffer))+pos)
         return buf[int(player)]
     
-
-    
     @micropython.viper            
-    def read(self,name):
+    def read(self, name) -> int:
         v = self.values[name]
+        b = int(ptr8(self.buffer)) + int(v.pos)
         if v.type == VALUE_BYTE:
-            return self.read_byte(v.pos) 
+            return ptr8(b)[0]
         elif v.type == VALUE_WORD:
-            return self.read_word(v.pos)
+            return ptr16(b)[0]
         elif v.type == VALUE_DWORD:
-            return self.read_dword(v.pos)
+            return ptr32(b)[0]
         
     @micropython.viper            
-    def read_player(self, name, player):
+    def read_player(self, name, player: int) -> int:
         v = self.values[name]
+        b = int(ptr8(self.buffer)) + int(v.pos)
         if v.type == VALUE_BYTE:
-            return self.read_byte_player(v.pos, player) 
+            return ptr8(b)[player]
         elif v.type == VALUE_WORD:
-            return self.read_word_player(v.pos, player)
+            return ptr16(b)[player]
         elif v.type == VALUE_DWORD:
-            return self.read_dword_player(v.pos, player)
+            return ptr32(b)[player]
         
         
     def tick(self, dt):
@@ -534,6 +539,7 @@ class MultiplayerNode(EmptyNode):
     #with viper 2719
     #           2234 optimzed read
     #           1808 optimied write
+    #           1457 without calling extra function
     #without viper 5885
     def testspeed(self):
         self.clear()
@@ -581,6 +587,54 @@ class MultiplayerNode(EmptyNode):
         print("Time: "+str(duration));
         
         self.clear()
+        
+    #with viper 726    
+    def testspeed2(self):
+        self.clear()
+        self.device_count = 2
+        self.local_count = 3
+        self.count = self.device_count * self.local_count
+        
+    
+        value_byte = self.register("byte", VALUE_BYTE)
+        value_word = self.register("word", VALUE_WORD)
+        value_dword = self.register("dword", VALUE_DWORD)
+        value_bytep= self.register("bytep", VALUE_BYTE, True)
+        value_wordp = self.register("wordp", VALUE_WORD, True)
+        value_dwordp = self.register("dwordp", VALUE_DWORD, True)
+        
+        start = time.ticks_ms()
+        for count in range(0,1000):
+            self.write_byte(value_byte, count % 256)
+            self.write_word(value_word, count % 65536)
+            self.write_dword(value_dword, count % 2147483648)
+            for player in range(0, self.count):
+                self.write_byte_player(value_bytep,(count+player) % 256, player)
+                self.write_word_player(value_wordp,(count+player) % 65536, player)
+                self.write_dword_player(value_dwordp, (count+player) % 2147483648, player)
+            
+            b = self.read_byte(value_byte)
+            assert b == count % 256, "byte"
+            w = self.read_word(value_word)
+            assert w == count % 65536, "word"
+            dw = self.read_dword(value_dwordp)
+            assert dw == count % 2147483648, "dword"      
+            for player in range(0, self.count):
+                #print("player="+str(player))
+                
+                b = self.read_byte_player(value_bytep, player)
+                #print(str(b)+" = "+str(count % 256) )
+                #print(self.debug())
+                assert b == (count+player) % 256 , "bytep"
+                w = self.read_word_player(value_wordp, player)
+                assert w == (count+player) % 65536, "wordp"
+                dw = self.read_dword_player(value_dwordp, player)
+                assert dw == (count+player) % 2147483648  , "dwordp"
+        end = time.ticks_ms()
+        duration = end-start
+        print("Time2: "+str(duration));
+        
+        self.clear()        
 
         
         
