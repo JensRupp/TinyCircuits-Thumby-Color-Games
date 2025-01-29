@@ -14,11 +14,17 @@ import math
 import engine_link
 import engine_save
 import json
+
+from bonusdots import BonusDots
+from settings import Settings
+from explosion import Explosion
+
 from gaclib import options
 from gaclib import helper
 from gaclib import highscore
 from gaclib import multiplayer
 from gaclib import logger
+
 
 # Const Definitions
 GAME_NAME = "WallRacer"
@@ -28,13 +34,6 @@ SCREEN_HEIGHT = 128
 VIRTUAL_WIDTH = [int(SCREEN_WIDTH), int(SCREEN_WIDTH * 1.5), int(SCREEN_WIDTH * 2)] 
 VIRTUAL_HEIGHT = [int(SCREEN_HEIGHT), int(SCREEN_HEIGHT * 1.5), int(SCREEN_HEIGHT * 2) ]
 BONUS_FACTOR = 20  # points for collecting a bonus dot multiplied by speed
-BONUS_DISTANCE = 20  # minimum distance between dots
-BONUS_COUNT = 3  # number of bonus dots displayed
-BONUS_TOLERANCE = 1  # how near the player needs to be to collect the bonus
-BONUS_BORDER_DISTANCE = 10 # minimum distance from border for bonus points 
-EXPLOSION_BITS = 72  # number of pixels in the explosion
-EXPLOSION_STEPS = 20  # number of steps the explosion runs
-EXPLOSION_RUMBLE = 0.4 # rumble intensity during explosion
 POINTS_WON = 1000  # extra points for winning
 #BOOST_COOLDOWN = 80  # number of pixels to wait for next boost
 BOOST_COOLDOWN = 20
@@ -151,137 +150,12 @@ def initHighscore():
             
     return score
 
-class Settings():
-    def __init__(self):
-        #empty data sets defaults
-        self.set({})
-        
-    def get(self):
-        data = {}
-        #these names must match the definitions in wallracer.options
-        data["speed"] = self.speed
-        data["link"] = self.link
-        data["player1t"] = self.player1t
-        data["player2t"] = self.player2t
-        data["arena"] = self.arena
-        data["arenasmall"] = self.arenasmall
-        data["boost"] = self.boost
-        data["bonus"] = self.bonus
-        data["showfps"] = self.showfps
-        return data
-    
-    def set(self, data):
-        self.speed = data.get("speed", 5)
-        self.link = data.get("link", False)
-        self.player1t = data.get("player1t",1)
-        self.player2t = data.get("player2t",1)
-        self.arena = data.get("arena",3)
-        self.arenasmall = data.get("arenasmall",1)
-        self.boost = data.get("boost",1)
-        self.bonus = data.get("bonus",1)
-        self.showfps = data.get("showfps", False)
-        
-    def highscore_id(self):
-        #highscore for now only on single player
-        if (not self.link) and (self.player1t == 1):
-            id = "S"+str(self.speed)+"A"+str(self.arena)+"B"+str(self.bonus)    
-        else:    
-            id = ""
-        return id    
-        
-        
-    def save(self):
-        engine_save.set_location("wallracer.data")    
-        data = self.get()
-        data_json = json.dumps(data)
-        engine_save.save("options", data_json)
-    
-    def load(self):
-        engine_save.set_location("wallracer.data")
-        data_json = engine_save.load("options", json.dumps(self.get()))
-        data = json.loads(data_json)
-        self.set(data)
 
 # Global Settings
 settings = Settings()
 settings.load()
 
 score = initHighscore()
-
-# Add a bonus dot at random position but keep distance to other dots and player
-def addBonus(multi):
-    ok = False
-    while not ok:
-        ok = True
-        x = random.randint(BONUS_BORDER_DISTANCE, multi.state.width - BONUS_BORDER_DISTANCE)
-        y = random.randint(BONUS_BORDER_DISTANCE, multi.state.height - BONUS_BORDER_DISTANCE)
-
-        # check distance to players
-        for player in range(0,multi.count):
-            player_x = multi.read_player("x", player)
-            player_y = multi.read_player("y", player)
-            if (
-                (x >= player_x - BONUS_DISTANCE)
-                and (x <= player_x + BONUS_DISTANCE)
-                and (y >= player_y - BONUS_DISTANCE)
-                and (y <= player_y + BONUS_DISTANCE)
-            ):
-                ok = False
-
-        # check distance to other bonus
-        for point in multi.state.bonus:
-            if (
-                (x >= point[0] - BONUS_DISTANCE)
-                and (x <= point[0] + BONUS_DISTANCE)
-                and (y >= point[1] - BONUS_DISTANCE)
-                and (y <= point[1] + BONUS_DISTANCE)
-            ):
-                ok = False
-
-    point = [x, y]
-    multi.state.bonus.append(point)
-
-
-# Add inital bonus
-def initBonus(multi):
-    multi.state.bonus.clear()
-    for c in range(BONUS_COUNT):
-        addBonus(multi)
-
-
-# Draw one bonus dot at x,y location
-def drawBonus(x, y, animation, state):
-    if animation == -1:
-        color = BACKGROUND
-    else:
-        color = ANIMATION[int(animation // 5) % 2]
-
-    # draw 3x3 dot
-    for nx in range(x - 1, x + 2):
-        state.screen.vline(nx, y - 1, 3, color)
-
-
-# Draw all bonus dots from the list
-def drawBonusList(animation, state):
-    for point in state.bonus:
-        drawBonus(point[0], point[1], animation, state)
-
-
-# Check if a bonus is at location x,y if yes remove it from screen and return the index in the list
-def checkBonus(x, y, state):
-    hit = -1
-    for index in range(len(state.bonus)):
-        point = state.bonus[index]
-        if (
-            (x >= point[0] - BONUS_TOLERANCE)
-            and (x <= point[0] + BONUS_TOLERANCE)
-            and (y >= point[1] - BONUS_TOLERANCE)
-            and (y <= point[1] + BONUS_TOLERANCE)
-        ):
-            # remove the bonus
-            drawBonus(point[0], point[1], -1, state)
-            hit = index
-    return hit
 
 # draw a frame with alternating colors
 def drawFrame(screen, width: int, height: int):
@@ -325,19 +199,20 @@ def displayBonus(points, state):
 
 
 class GameState():
-    def __init__(self, screen):
-        self.width = 0
-        self.height = 0
+    def __init__(self, width, height, speed):
+        self.width = width
+        self.height = height
+        self.speed = speed 
+        
         self.won = -1
-        self.screen = screen
+        
+        self.screen = None
         self.arena = None
-        self.speed = 0 #set from settings
         # for explosions
-        self.bits = []
-        self.explosion = 0
+        self.explosion = Explosion(self.width, self.height)
         # for bonus points
-        self.hasbonus = False
-        self.bonus = []
+        self.hasbonusdots = False
+        self.bonusdots = BonusDots(self.width, self.height)
         
         # for bonus point display
         self.sleep = 0
@@ -495,8 +370,8 @@ def cbinitgame(multi):
         multi.write_player("y", y, player)
         multi.write_player("d", d, player)
         
-    if multi.state.hasbonus:       
-        initBonus(multi)
+    if multi.state.hasbonusdots:       
+        multi.state.bonusdots.init(allplayerpos(multi))
     
 
 
@@ -514,6 +389,14 @@ def cbinitplayer(multi, player):
     multi.write_player("b", 0, player)
     multi.write_player("p", 0, player)
     
+#get position of all player in an array   
+def allplayerpos(multi):
+    p = []
+    for player in range(0, multi.count):
+        x = multi.read("x")
+        y = multi.read("y")
+        p.append([x,y])
+    return p    
        
 def cbplayer(multi, player):
     if multi.state.sleep > 0:
@@ -582,12 +465,10 @@ def cbplayer(multi, player):
                 
                 points += 1
 
-                if multi.state.hasbonus: 
-                    hit = checkBonus(x, y, multi.state)
-                    if hit >= 0:
-                        # if hit remove the existing bonus and add a new one
-                        del multi.state.bonus[hit]
-                        addBonus(multi)
+                if multi.state.hasbonusdots: 
+                    hit = multi.state.bonusdots.check(x, y, multi.state.screen)
+                    if hit:
+                        multi.state.bonusdots.add(allplayerpos(multi))
                         speed = multi.read("speed")
                         bonus_points = speed * BONUS_FACTOR
                         points += points
@@ -631,7 +512,7 @@ def cbdisplay(multi):
                 
             multi.state.screen.pixel(x, y, PLAYER_COLOR[color][player])
         elif c == 1:
-            addexplosion(x,y, multi.state)
+            multi.state.explosion.add(x,y)
             multi.write_player("c", 2, player)
         #center on this player
         if multi.state.width > SCREEN_WIDTH:
@@ -640,35 +521,28 @@ def cbdisplay(multi):
                 screeny = SCREEN_HEIGHT - y
                 multi.state.arena.position = Vector2(screenx, screeny)
 
-    if multi.state.hasbonus:
-        drawBonusList(multi.counter, multi.state)
+    if multi.state.hasbonusdots:
+        multi.state.bonusdots.draw_all(multi.counter, multi.state.screen)
 
 
-    if multi.state.explosion > 0:
-        moveexplosion(multi.state)
-        multi.state.explosion -= 1
-
-        if multi.state.explosion == 0:
-            engine_io.rumble(0)
-            clearexplosion(multi.state)
-            
-            #count active players
-            if multi.count > 1:
-                active = 0
-                for player in range(0, multi.count):
-                    if multi.read_player("c", player) == 0:
-                        multi.state.won = player
-                        active+=1
-                #for multiplayer game stop when 1 player is left        
-                if active < 2:        
-                    time.sleep(0.5)        
-                    multi.docancel()
-            else:
-                #for singleplayer always stop after explosion
-                multi.state.won = 0
+    if multi.state.explosion.move(multi.state.screen):
+        #count active players
+        if multi.count > 1:
+            active = 0
+            for player in range(0, multi.count):
+                if multi.read_player("c", player) == 0:
+                    multi.state.won = player
+                    active+=1
+            #for multiplayer game stop when 1 player is left        
+            if active < 2:        
                 time.sleep(0.5)        
                 multi.docancel()
-                
+        else:
+            #for singleplayer always stop after explosion
+            multi.state.won = 0
+            time.sleep(0.5)        
+            multi.docancel()
+    
 
 def initScreen(width: int, height: int):
     texture = TextureResource(int(width), int(height),0,16)
@@ -719,6 +593,8 @@ def updateFPS(fpsnode):
             fpssum = 0
             fpscount = FPSAVERAGECOUNT
 
+
+
 def playGame():
     global settings
     
@@ -732,24 +608,25 @@ def playGame():
         localcount = settings.player1t
 
     multi = multiplayer.MultiplayerNode(devicecount, localcount)
+    
+    
+    
     multi.log = log
     multi.text_connecting = helper.Text("Connecting", font16,Vector2(1, 1), WHITE  )
     multi.text_cancel = helper.Text("M to cancel", font6,Vector2(1, 1), WHITE  )
     multi.text_start = helper.Text(" Press\n    A\nto start", font16,Vector2(1, 1), WHITE  )
     multi.text_countdown = helper.Text("Ready",font16,Vector2(2, 2), WHITE )
     multi.countdown = 2
-    
-    #init state
-    multi.state = GameState(None)
-    multi.state.speed = settings.speed
-        
+
     # only for 1 player on a thumby allow  bigger screen
     if localcount == 1:
         size = settings.arena
     else:
         size = 1
-    multi.state.width = VIRTUAL_WIDTH[size-1]
-    multi.state.height = VIRTUAL_HEIGHT[size-1]
+
+    #init state
+    multi.state = GameState(VIRTUAL_WIDTH[size-1], VIRTUAL_HEIGHT[size-1], settings.speed)
+    
    
     #init controls    
     if multi.local_count == 1:
@@ -784,7 +661,7 @@ def playGame():
         
     #set bonus
     if multi.device_count == 1:
-        multi.state.hasbonus = settings.bonus == 1
+        multi.state.hasbonusdots = settings.bonus == 1
             
 
     multi.register("speed", multiplayer.VALUE_BYTE)
@@ -794,7 +671,9 @@ def playGame():
     multi.register("t", multiplayer.VALUE_BYTE, True)
     multi.register("c", multiplayer.VALUE_BYTE, True)    
     multi.register("b", multiplayer.VALUE_BYTE, True)    
-    multi.register("p", multiplayer.VALUE_WORD, True)    
+    multi.register("p", multiplayer.VALUE_DWORD, True)
+    
+    
 
     multi.cb_init_game = cbinitgame
     multi.cb_init_player = cbinitplayer
@@ -972,6 +851,14 @@ def displayPoints(points, won = -1):
 
 
 def test():
+    multi = multiplayer.MultiplayerNode(1, 1)
+    multi.testbuffer()
+    multi.testspeed()
+    multi.testspeed2()
+    multi.mark_destroy
+
+    
+    
     nodes = []
     for x in range(0,3):
         for y in range(0,6):
@@ -1011,54 +898,6 @@ def displayOptions():
 
 
     node.mark_destroy()
-
-
-def addexplosion(x, y, state):
-    for count in range(EXPLOSION_BITS):
-        # x,y x speed, y speed
-        bit = [
-            x,
-            y,
-            (random.randint(0, 20) - 10) / 20,
-            (random.randint(0, 20) - 10) / 20,
-        ]
-        state.bits.append(bit)
-    fixexplosion(state)            
-    engine_io.rumble(EXPLOSION_RUMBLE)
-    state.explosion = EXPLOSION_STEPS * 2   
-
-def clearexplosion(state):
-    for bit in state.bits:
-        state.screen.pixel(int(bit[0]), int(bit[1]), BACKGROUND)
-    state.bits = []    
-
-def fixexplosion(state):
-    for bit in state.bits:
-        if bit[0] < 1:
-            bit[0] = 1
-        if bit[0] >= state.width - 1:
-            bit[0] = state.width - 2
-
-        if bit[1] < 1:
-            bit[1] = 1
-        if bit[1] >= state.height - 1:
-            bit[1] = state.height - 2
-
-
-def moveexplosion(state):
-    # remove from current position
-    for bit in state.bits:
-        state.screen.pixel(int(bit[0]), int(bit[1]), BACKGROUND)
-        
-    # move bits to new position
-    for bit in state.bits:
-        bit[0] = bit[0] + bit[2]
-        bit[1] = bit[1] + bit[3]
-    fixexplosion(state)    
-
-    # draw at new position
-    for bit in state.bits:
-        state.screen.pixel(int(bit[0]), int(bit[1]), EXPLOSION)
 
 
 page = 1
