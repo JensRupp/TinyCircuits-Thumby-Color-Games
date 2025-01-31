@@ -132,9 +132,10 @@ class highscore():
         while True:
             if engine.tick():
                 if engine_io.A.is_just_pressed:
-                    break
-                if engine_io.B.is_just_pressed:
-                    break
+                    pos = pos + 1
+                    if pos == 3:
+                        break
+                    self.setcolor(pos,letter)    
                 if engine_io.UP.is_just_pressed:
                     n = ord(letter[pos].text[0])
                     n = n + 1
@@ -175,6 +176,8 @@ class highscore():
         score = self.score[id]
         if newscore > score[self.count-1][0]:
             self.enter(id, newscore)
+            return True
+        return False
             
         
     def show(self, id: str):

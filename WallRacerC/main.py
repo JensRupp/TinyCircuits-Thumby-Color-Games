@@ -1,19 +1,13 @@
 import os
-import engine_main
 import engine
-from engine_nodes import EmptyNode, Rectangle2DNode, CameraNode, Text2DNode, Sprite2DNode
+from engine_nodes import Rectangle2DNode, CameraNode, Text2DNode, Sprite2DNode
 import engine_io
 import gc
-import framebuf
 import engine_draw
 import time
 import random
 from engine_math import Vector2
 from engine_resources import FontResource, TextureResource
-import math
-import engine_link
-import engine_save
-import json
 
 from settings import Settings
 from game import Game, PLAYER_COLOR
@@ -26,7 +20,7 @@ from gaclib import logger
 
 # Const Definitions
 GAME_NAME = "WallRacer"
-VERSION = "V1.6"
+VERSION = "V1.7"
 
 VIRTUAL_WIDTH = [int(helper.SCREEN_WIDTH), int(helper.SCREEN_WIDTH * 1.5), int(helper.SCREEN_WIDTH * 2)] 
 VIRTUAL_HEIGHT = [int(helper.SCREEN_HEIGHT), int(helper.SCREEN_HEIGHT * 1.5), int(helper.SCREEN_HEIGHT * 2) ]
@@ -36,9 +30,7 @@ PAGE_QUIT = 0
 PAGE_TITLE = 1
 PAGE_GAME = 2
 PAGE_OPTIONS = 3
-PAGE_WAITFORPLAYER = 4
 PAGE_HIGHSCORE = 5
-PAGE_ENTERHIGHSCORE = 6
 PAGE_TEST = 7
 
 # map engine colors to framebuffer
@@ -301,20 +293,16 @@ while page != PAGE_QUIT:
         count, won, points = playGame()
         if won >=0:
             displayPoints(count, points, won)
+        page = PAGE_TITLE            
         if settings.highscore_id() != "":
-            score.check(settings.highscore_id(), points)
-        page = PAGE_TITLE
+            if score.check(settings.highscore_id(), points):
+                page = PAGE_HIGHSCORE
     if page == PAGE_OPTIONS:
         displayOptions()
         page = PAGE_TITLE
-    if page == PAGE_WAITFORPLAYER:
-        page = waitForPlayer()
     if page == PAGE_HIGHSCORE:
         displayHighscore()
         page = PAGE_TITLE        
-    if page == PAGE_ENTERHIGHSCORE:
-        enterHighscore(points)
-        page = PAGE_HIGHSCORE
     if page == PAGE_TEST:
         test()
         page = PAGE_TITLE

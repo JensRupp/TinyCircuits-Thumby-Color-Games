@@ -413,9 +413,6 @@ class Game():
         
         self.font6 = font6
         self.font16 = font16
-        
-        
-
 
     def addFPS(self):
         if self.showfps:
@@ -494,9 +491,6 @@ class Game():
         )
         #display for a short time
         self.sleep =  engine.fps_limit() // 2
-
-
-    
     
     def play(self):
         engine.fps_limit(120)
