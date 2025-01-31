@@ -1,3 +1,4 @@
+import os
 from engine_math import Vector2
 from engine_resources import FontResource
 from engine_nodes import Text2DNode
@@ -56,14 +57,35 @@ def word_wrap(text,font: FontResource, scale: Vector2, width):
                            1,
                            0,
                            0)
+          #print(temp+" = " + str(tempnode.width))
           if (tempnode.width < width) or first:
               #word does fit
               buildline = temp
           else:
               # word does not fit
               full = full + buildline + "\n"
+              #print("Full: " + full)
               buildline = word
           tempnode.mark_destroy()              
           first = False    
       full = full +  buildline + "\n"
   return full
+
+def is_simulator():
+    try:
+      info = os.uname()
+      return info.sysname != "rp2"
+    except:
+      return True
+    
+def print_memory_usage():
+    gc.collect()
+    free_memory = gc.mem_free()
+    allocated_memory = gc.mem_alloc()
+    total_memory = free_memory + allocated_memory
+    print(f"Total Memory: {total_memory} bytes")
+    print(f"Allocated Memory: {allocated_memory} bytes")
+    print(f"Free Memory: {free_memory} bytes")
+    print()
+    
+

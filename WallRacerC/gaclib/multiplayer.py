@@ -7,7 +7,17 @@ import engine
 import engine_io
 from engine_math import Vector2
 
-VERSION = "0.4"
+if helper.is_simulator():
+    print("import simulator")
+    from gaclib import multiplayer_simulator
+    baseclass = multiplayer_simulator.MultiplayerNodeSimulator
+else:
+    print("import viper")
+    from gaclib import multiplayer_viper
+    baseclass = multiplayer_viper.MultiplayerNodeViper
+
+
+VERSION = "0.5"
 
 HOSTMODE_RANDOM = 0
 HOSTMODE_HOST = 1   #not implemented yet
@@ -17,15 +27,9 @@ VALUE_BYTE = 0  # 1 byte
 VALUE_WORD = 1  # 2 byte
 VALUE_DWORD= 2  # 4 byte
 
+
 VALUE_SIZE = [1,2,4]
 
-#logfile = open("/Games/MultiTest/MultiTest.log", "a")
-def log(msg):
-    pass
-    #global logfile
-    #xmsg = str(time.ticks_ms()) + ": " + msg
-    #logfile.write(xmsg + "\n")
-    #logfile.flush()
 
 class Value():
    def __init__(self, name: str, type, pos: int, count: int):
@@ -35,12 +39,13 @@ class Value():
         self.pos = pos
         self.count = count
         
-class MultiplayerNode(EmptyNode):
+class MultiplayerNode(baseclass):
+    
 
     def __init__(self, devicecount, localcount):
-        super().__init__(self)
-        #should run before all other nodes
+        super().__init__()
         self.log = None
+        #should run before all other nodes
         self.layer = 0
         #fullscreen
         self.position = Vector2(0,0)
@@ -61,7 +66,6 @@ class MultiplayerNode(EmptyNode):
         self.hostmode = HOSTMODE_RANDOM
 
         self.countdown = 5
-        self.host = False
 
         #for synced data
         self.values = {}
@@ -70,7 +74,7 @@ class MultiplayerNode(EmptyNode):
         self.buffer = None
         
         #callback calling order
-        #
+        # cb_identify_players: called during start screen
         # cb_init_game: once at start of game on the host thumby
         # cb_init_player: once per player at start of game
         # loop
@@ -125,6 +129,7 @@ class MultiplayerNode(EmptyNode):
         engine_link.clear_send()
         engine_link.clear_read()
         self.cancel = False
+    
     def disconnected(self):
         #when the connection is lost stop game on all thumbies
         self.cancel = True
@@ -149,15 +154,18 @@ class MultiplayerNode(EmptyNode):
             r = r + " "+ value.name +"("+str(value.type)+","+str(value.pos)+")="+v
         return r
     
+    #just stop the game but keep the connection
+    #next game starts faster and the host does not switch
     def docancel(self):
         self.cancel = True
-        
+    
+    #stop game and connection
     def stop(self):
         engine_link.stop()
         
-        
+
+    #start a multiplayer game
     def start(self):
-        
         self.cancel = False
         self.synced = False
         if self.count > 1:
@@ -165,7 +173,6 @@ class MultiplayerNode(EmptyNode):
                 position=Vector2(0, 0),
                 text=self.text_cancel.text,
                 font=self.text_cancel.font,
-                line_spacing=1,
                 color=self.text_cancel.color,
                 scale=self.text_cancel.scale,
                 )
@@ -175,45 +182,39 @@ class MultiplayerNode(EmptyNode):
             
             
             if self.device_count > 1:
-                nodeconnecting = Text2DNode(
-                    position=Vector2(0, 0),
-                    text=self.text_connecting.text,
-                    font=self.text_connecting.font,
-                    line_spacing=1,
-                    color=self.text_connecting.color,
-                    scale=self.text_connecting.scale,
-                    )
-                self.add_child(nodeconnecting)
-                
-                
-                if engine_link.connected():
-                    #if already connected clear all the buffers
-                    #engine_link.clear_send()
-                    #engine_link.clear_read()
-                    pass
-                else:
+                if not engine_link.connected():
+                    nodeconnecting = Text2DNode(
+                        position=Vector2(0, 0),
+                        text=self.text_connecting.text,
+                        font=self.text_connecting.font,
+                        color=self.text_connecting.color,
+                        scale=self.text_connecting.scale,
+                        )
+                    self.add_child(nodeconnecting)
+                    
                     engine_link.start()
-                while not engine_link.connected() and (not self.cancel):
-                    if engine.tick():
-                        if engine_io.MENU.is_just_pressed:
-                            self.cancel = True
 
-                nodeconnecting.mark_destroy()
+                    while not engine_link.connected() and (not self.cancel):
+                        if engine.tick():
+                            if engine_io.MENU.is_just_pressed:
+                                self.cancel = True
+
+                    nodeconnecting.mark_destroy()
              
-                if self.cancel:
-                    engine_link.stop()
-                    return False
+                    if self.cancel:
+                        engine_link.stop()
+                        return False
             
             nodestart = Text2DNode(
                 position=Vector2(0, 0),
                 text=self.text_start.text,
                 font=self.text_start.font,
-                line_spacing=1,
                 color=self.text_start.color,
                 scale=self.text_start.scale,
                 )
             self.add_child(nodestart)
 
+            #add identifying labels to the start screen
             if self.cb_identify_players != None:
                 self.cb_identify_players(self, True)
 
@@ -243,7 +244,6 @@ class MultiplayerNode(EmptyNode):
                 position=Vector2(0, 0),
                 text=self.text_countdown.text,
                 font=self.text_countdown.font,
-                line_spacing=1,
                 color=self.text_countdown.color,
                 scale=self.text_countdown.scale,
                 )
@@ -300,7 +300,7 @@ class MultiplayerNode(EmptyNode):
                 for number in range(0, self.local_count):
                     if self.cb_init_player != None:
                         self.cb_init_player(self, number)
-                #send the complelty initialized data to client        
+                #send the complete initialized data to client        
                 if self.device_count>1:    
                     engine_link.send(self.buffer)                                                
             else:
@@ -334,18 +334,14 @@ class MultiplayerNode(EmptyNode):
         self.size = 0
         self.buffer = None
 
-            
+        
+    #register synced data
+    #returned value can be used as "handle" for faster access (pos parameter)   
     def register(self,name: str, type: int, player: bool = False):
         if player:
             count = self.count
         else:
             count = 1
-
-        #align to valuesize    
-        #r = self.datapos % VALUE_SIZE[type]
-        #if r > 0:
-        #  self.datapos += VALUE_SIZE[type] - r
-        #  self.size += VALUE_SIZE[type] - r 
             
         v = Value(name,type,self.datapos, count)
         self.values[name] = v
@@ -354,115 +350,6 @@ class MultiplayerNode(EmptyNode):
         self.buffer = bytearray(self.size)
         return v.pos
        
-    @micropython.viper    
-    def write_byte(self, pos: int ,value: int):
-        buf = ptr8(int(ptr8(self.buffer))+pos)
-        buf[0] = value
-
-    @micropython.viper    
-    def write_byte_player(self, pos: int ,value: int, player: int):
-        buf = ptr8(int(ptr8(self.buffer))+pos)
-        buf[player] = value
-
-        
-    @micropython.viper    
-    def write_word(self, pos: int,value: int):
-        buf = ptr16(int(ptr8(self.buffer))+pos)
-        buf[0] = value
-
-    @micropython.viper    
-    def write_word_player(self, pos: int,value: int, player: int):
-        buf = ptr16(int(ptr8(self.buffer))+pos)
-        buf[player] = value
-
-        
-    @micropython.viper    
-    def write_dword(self, pos: int,value: int):
-        buf = ptr32(int(ptr8(self.buffer))+pos)
-        buf[0] = value
-
-    @micropython.viper    
-    def write_dword_player(self, pos: int,value: int, player: int):
-        buf = ptr32(int(ptr8(self.buffer))+pos)
-        buf[player] = value
-       
-    
-    @micropython.viper            
-    def write(self, name, value: int):
-        v = self.values[name]
-        b = int(ptr8(self.buffer)) + int(v.pos)
-        if v.type == VALUE_BYTE:
-            ptr8(b)[0] = value
-        elif v.type == VALUE_WORD:
-            ptr16(b)[0] = value
-            self.write_word(v.pos, value)
-        elif v.type == VALUE_DWORD:
-            ptr32(b)[0] = value
-
-            
-    @micropython.viper            
-    def write_player(self, name, value: int, player: int):
-        v = self.values[name]
-        b = int(ptr8(self.buffer)) + int(v.pos)
-        if v.type == VALUE_BYTE:
-            ptr8(b)[player] = value
-        elif v.type == VALUE_WORD:
-            ptr16(b)[player] = value
-        elif v.type == VALUE_DWORD:
-            ptr32(b)[player] = value
-
-    @micropython.viper
-    def read_byte(self, pos: int) -> int:
-        buf = ptr8(int(ptr8(self.buffer))+pos)
-        return buf[0]
-    
-    @micropython.viper
-    def read_byte_player(self, pos: int, player: int) -> int:
-        buf = ptr8(int(ptr8(self.buffer))+pos)
-        return buf[player]
-    
-    @micropython.viper
-    def read_word(self, pos: int) -> int:
-        buf = ptr16(int(ptr8(self.buffer))+pos)
-        return buf[0]
-
-    @micropython.viper
-    def read_word_player(self, pos: int, player: int) -> int:
-        buf = ptr16(int(ptr8(self.buffer))+pos)
-        return buf[player]
-
-
-    @micropython.viper
-    def read_dword(self, pos: int) -> int:
-        buf = ptr32(int(ptr8(self.buffer))+pos)
-        return buf[0]
-    
-    @micropython.viper
-    def read_dword_player(self, pos: int, player: int) -> int:
-        buf = ptr32(int(ptr8(self.buffer))+pos)
-        return buf[int(player)]
-    
-    @micropython.viper            
-    def read(self, name) -> int:
-        v = self.values[name]
-        b = int(ptr8(self.buffer)) + int(v.pos)
-        if v.type == VALUE_BYTE:
-            return ptr8(b)[0]
-        elif v.type == VALUE_WORD:
-            return ptr16(b)[0]
-        elif v.type == VALUE_DWORD:
-            return ptr32(b)[0]
-        
-    @micropython.viper            
-    def read_player(self, name, player: int) -> int:
-        v = self.values[name]
-        b = int(ptr8(self.buffer)) + int(v.pos)
-        if v.type == VALUE_BYTE:
-            return ptr8(b)[player]
-        elif v.type == VALUE_WORD:
-            return ptr16(b)[player]
-        elif v.type == VALUE_DWORD:
-            return ptr32(b)[player]
         
         
     def tick(self, dt):
@@ -536,17 +423,16 @@ class MultiplayerNode(EmptyNode):
               self.testvalue(test)                    
         self.clear()
     
-    #with viper 2719
-    #           2234 optimzed read
-    #           1808 optimied write
-    #           1457 without calling extra function
     #without viper 5885
+    #with viper    2719 initial code
+    #              2234 optimzed read
+    #              1808 optimied write
+    #              1457 without calling extra function
     def testspeed(self):
         self.clear()
         self.device_count = 2
         self.local_count = 3
         self.count = self.device_count * self.local_count
-        
     
         self.register("byte", VALUE_BYTE)
         self.register("word", VALUE_WORD)
@@ -588,7 +474,7 @@ class MultiplayerNode(EmptyNode):
         
         self.clear()
         
-    #with viper 726    
+    #test direct acccess, about twice the speed    
     def testspeed2(self):
         self.clear()
         self.device_count = 2
