@@ -135,7 +135,7 @@ class OptionsNode(EmptyNode):
         self.table.selcolor = self.list.selected
         self.table.selection = table.SELECTION_ROW
         self.table.callback = self.callback
-        helper.align_top(self.table, self.titlenode.height + 4)
+        helper.align_top(self.table, self.titlenode.height + 6)
 
 
         for index, option in enumerate(self.options):

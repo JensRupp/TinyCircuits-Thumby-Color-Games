@@ -1,3 +1,4 @@
+import engine_main
 import os
 import engine
 from engine_nodes import Rectangle2DNode, CameraNode, Text2DNode, Sprite2DNode
@@ -17,6 +18,7 @@ from gaclib import helper
 from gaclib import highscore
 from gaclib import multiplayer
 from gaclib import logger
+from gaclib import menu
 
 # Const Definitions
 GAME_NAME = "WallRacer"
@@ -122,71 +124,62 @@ def displayTitle():
     engine.fps_limit(60)
 
     logo_node = Sprite2DNode(
-        position=Vector2(0, 80),
+        position=Vector2(0, -48),
         texture=logo,
-        opacity=0.0,
     )
 
-    text1 = Text2DNode(
-        position=Vector2(-50, 16),
-        text="A\nB\nU\nM",
-        font=font16,
-        line_spacing=1,
-        color=WHITE,
-        scale=Vector2(1, 1),
-        opacity=0.0,
-    )
-    text2 = Text2DNode(
-        position=Vector2(10, 16),
-        text="Start\nOptions\nHighscore\nQuit",
-        font=font16,
-        line_spacing=1,
-        color=WHITE,
-        scale=Vector2(1, 1),
-        opacity=0.0,
-    )
+    help = helper.Text("A Select B Back",font6,Vector2(1, 1),YELLOW)
+    info = helper.Text("Info",font6,Vector2(1, 1), YELLOW)
+    menuformat = menu.MenuFormat(font16, Vector2(1, 1),WHITE, GREEN)
+
+    start = []
+    start.append(menu.Menu("1 Player", 11, None))
+    start.append(menu.Menu("2 Players", 12, None))
+    start.append(menu.Menu("3 Players", 13, None))
+
+    hostlink = []
+    hostlink.append(menu.Menu("Link 1v1", 21, None))
+    hostlink.append(menu.Menu("Link 2v2", 22, None))
+    hostlink.append(menu.Menu("Link 3v3", 23, None))
+
+    menuitems = []
+    menuitems.append(menu.Menu("Start Game", 1, start))
+    menuitems.append(menu.Menu("Host Game", 2, hostlink))
+    menuitems.append(menu.Menu("Join Game", 3, None))
+    menuitems.append(menu.Menu("Options", 4, None))
+    menuitems.append(menu.Menu("Highscore", 5, None))
+    menuitems.append(menu.Menu("Test", 6, None))
+
+
+    menunode = menu.MenuNode(Vector2(0,0), helper.SCREEN_WIDTH, 92, help, info, menuformat, menuitems)
+    helper.align_bottom(menunode)
 
     page = 0
-    count = 0
 
-    ypos = 80
-    opacity = 0
-
-    while True:
+    while menunode.selection==0:
         if engine.tick():
-            logo_node.position = Vector2(0, ypos)
-            logo_node.opacity = opacity
-            if ypos > -40:
-                ypos -= 1
-            else:
-                text1.opacity = 1
-                text2.opacity = 1
-
-            if opacity < 1:
-                opacity = opacity + 0.002
-
-            count += 1
-
-            # check buttons
-            if engine_io.A.is_just_pressed:
-                page = PAGE_GAME
-                break
-            if engine_io.B.is_just_pressed:
-                page = PAGE_OPTIONS
-                break
-            if engine_io.MENU.is_just_pressed:
-                page = PAGE_QUIT
-                break
-            if engine_io.UP.is_just_pressed:
-                if settings.highscore_id() != "":
-                    page = PAGE_HIGHSCORE
-                    break
-            if engine_io.DOWN.is_just_pressed:
-                    page = PAGE_TEST
-                    break
+            pass
+        
+    if menunode.selection == -1:
+        page = PAGE_QUIT
+    elif 11 <= menunode.selection <= 13:
+        page = PAGE_GAME
+    elif 21 <= menunode.selection <= 23:
+        page = PAGE_GAME
+    elif menunode.selection == 3:
+        page = PAGE_GAME
+    elif menunode.selection == 4:
+        page = PAGE_OPTIONS
+    elif menunode.selection == 5:
+        page = PAGE_HIGHSCORE 
+    elif menunode.selection == 6:
+        page = PAGE_TEST
+    else:
+        page = PAGE_QUIT
+        
     logo_node.mark_destroy()
-    text1.mark_destroy()
-    text2.mark_destroy()
+    menunode.mark_destroy_all()
+    
     return page
 
 
@@ -237,28 +230,66 @@ def displayPoints(count, points, won = -1):
 
 
 def test():
-    multi = multiplayer.MultiplayerNode(1, 1)
-    multi.testbuffer()
-    multi.testspeed()
-    multi.testspeed2()
-    multi.mark_destroy
+#     multi = multiplayer.MultiplayerNode(1, 1)
+#     multi.testbuffer()
+#     multi.testspeed()
+#     multi.testspeed2()
+#     multi.mark_destroy
+# 
+#     
+#     
+#     nodes = []
+#     for x in range(0,3):
+#         for y in range(0,6):
+#             c = PLAYER_COLOR[x][y]
+#             position = Vector2(x*21-64+10,y*21-64+10)
+#             node = Rectangle2DNode(position,20,20, c)
+#             nodes.append(node)
+#     
+#     while True:
+#         if engine.tick():
+#             if engine_io.A.is_just_pressed:
+#                 break
+#     for node in nodes:
+#         node.mark_destroy()
+    help = helper.Text("A Select B Back",font6,Vector2(1, 1),YELLOW)
+    info = helper.Text("Info",font6,Vector2(1, 1), YELLOW)
+    menuformat = menu.MenuFormat(font16, Vector2(1, 1),WHITE, GREEN)
+    
+    
+    sub11 = []
+    sub11.append(menu.Menu("O 1-1-1", 111, None))
+    sub11.append(menu.Menu("O 1-1-2", 112, None))
+    
+    sub12 = []
+    sub12.append(menu.Menu("O 1-2-1", 121, None))
+    sub12.append(menu.Menu("O 1-2-2", 122, None))
+    
+    
+    sub1 = []
+    sub1.append(menu.Menu("O 1-1", 11, sub11))
+    sub1.append(menu.Menu("O 1-2", 12, sub12))
+    sub1.append(menu.Menu("O 1-3", 13, None))
+    
+    sub2 = []
+    sub2.append(menu.Menu("O 2-1", 21, None))
+    sub2.append(menu.Menu("O 2-2", 22, None))
+    sub2.append(menu.Menu("O 2-3", 23, None))
 
+    menuitems = []
+    menuitems.append(menu.Menu("Option 1", 1, sub1))
+    menuitems.append(menu.Menu("Option 2", 2, sub2))
+    menuitems.append(menu.Menu("Option 3", 3, None))
+    menuitems.append(menu.Menu("Option 4", 4, None))
+    menuitems.append(menu.Menu("Option 5", 5, None))
+    menuitems.append(menu.Menu("Option 6", 6, None))
+
+    menunode = menu.MenuNode(Vector2(0,0), helper.SCREEN_WIDTH, 100, help, info, menuformat, menuitems)
+    helper.align_bottom(menunode)
+    x = menunode.show()
+    print(x)
+    menunode.mark_destroy_all()
     
-    
-    nodes = []
-    for x in range(0,3):
-        for y in range(0,6):
-            c = PLAYER_COLOR[x][y]
-            position = Vector2(x*21-64+10,y*21-64+10)
-            node = Rectangle2DNode(position,20,20, c)
-            nodes.append(node)
-    
-    while True:
-        if engine.tick():
-            if engine_io.A.is_just_pressed:
-                break
-    for node in nodes:
-        node.mark_destroy()
             
     
 

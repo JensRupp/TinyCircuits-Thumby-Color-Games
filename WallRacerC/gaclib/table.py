@@ -40,6 +40,7 @@ class TableNode(EmptyNode):
         self.rowcount = (self.height+1) // self.rowheight
         #print("height: "+str(self.height)+" rowheight="+str(self.rowheight)+" rowcount="+str(self.rowcount))
         self.changed = True
+        self.active = True
         
     def add_row(self, row, id = 0):
         nodes = []
@@ -135,30 +136,31 @@ class TableNode(EmptyNode):
                 self.callback()
     
     def tick(self, dt):
-        if (self.selection == SELECTION_ROW) or (self.selection == SELECTION_NODE):
-            if engine_io.DOWN.is_pressed_autorepeat:
-                if self.selectedrow < len(self.rows)-1:
-                    self.selectedrow += 1
-                    if self.selectedrow - self.top >= self.rowcount:
+        if self.active:
+            if (self.selection == SELECTION_ROW) or (self.selection == SELECTION_NODE):
+                if engine_io.DOWN.is_pressed_autorepeat:
+                    if self.selectedrow < len(self.rows)-1:
+                        self.selectedrow += 1
+                        if self.selectedrow - self.top >= self.rowcount:
+                            self.top += 1
+                        self.changed = True
+                if engine_io.UP.is_pressed_autorepeat:
+                    if self.selectedrow > 0:
+                        self.selectedrow -= 1
+                        if self.selectedrow < self.top:
+                            self.top = self.selectedrow
+                        self.changed = True
+            else:
+                if engine_io.DOWN.is_pressed_autorepeat:
+                    if self.top+self.rowcount < len(self.rows):
                         self.top += 1
-                    self.changed = True
-            if engine_io.UP.is_pressed_autorepeat:
-                if self.selectedrow > 0:
-                    self.selectedrow -= 1
-                    if self.selectedrow < self.top:
-                        self.top = self.selectedrow
-                    self.changed = True
-        else:
-            if engine_io.DOWN.is_pressed_autorepeat:
-                if self.top+self.rowcount < len(self.rows):
-                    self.top += 1
-                    self.changed = True
-            if engine_io.UP.is_pressed_autorepeat:
-                if self.top > 0:
-                    self.top -= 1
-                    self.changed = True
-            
-        self.update()    
+                        self.changed = True
+                if engine_io.UP.is_pressed_autorepeat:
+                    if self.top > 0:
+                        self.top -= 1
+                        self.changed = True
+                
+            self.update()    
                     
                     
                 
